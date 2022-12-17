@@ -51,14 +51,14 @@ def parse_moog(line,freeform=False):
     # 6300.265    607.0    1.28    5.78E-3            7.65    12R11410,5
     # 6300.310      8.0    0.00    1.78E-10
     if freeform==False:
-        lam = tofloat(line[0:7])
-        specid = tofloat(line[7:7+7])
-        ep = tofloat(line[14:14+7])
-        loggf = tofloat(line[21:21+7])
+        lam = tofloat(line[0:10])
+        specid = tofloat(line[10:20])
+        ep = tofloat(line[20:30])
+        loggf = tofloat(line[30:40])
         if loggf > 0:
             loggf = np.log10(loggf)
-        vdW = tofloat(line[28:28+7])
-        dis = tofloat(line[35:35+7])    
+        vdW = tofloat(line[40:50])
+        dis = tofloat(line[50:60])    
     
     # unformatted read
     # 6299.610  24.0   3.84   1.00E-3   0. 0.  0.
@@ -740,8 +740,310 @@ def parse_turbo(line):
     info['stark'] = gamstark
     info['molec'] = False
     return info
+
+#################  WRITERS  #####################3
+
+def writer_moog(info,freeform=False):
+    """ Create the output line for a MOOG linelist."""
+
+    # A line list near the [O I] feature
+    #  last column is comments and ignored
+    # formatted read, (7e10.3), 7 e10.3 values    
+    # 6299.610     24.0    3.84    1.00E-3
+    # 6299.660     40.0   1.520    1.585E-1
+    # 6299.691    607.0    0.23    4.34E-3            7.65    12Q2314,0
+    # 6300.265    607.0    1.28    5.78E-3            7.65    12R11410,5
+    # 6300.310      8.0    0.00    1.78E-10
+
+    # unformatted read
+    # 6299.610  24.0   3.84   1.00E-3   0. 0.  0.
+    # 6299.660  40.0   1.520  1.585E-1  0. 0.  0.
+    # 6299.691  607.0  0.23   4.34E-3   0. 0.  7.65        12Q2314,0
+    # 6300.265  607.0  1.28   5.78E-3   0. 0.  7.65        12R11410,5
+    # 6300.310  8.0    0.00   1.78E-10  0. 0.  0.
+        
+    specid = info['specid']
+    # Convert spec1d to MOOG format
+    name = num2name[int(specid)]
+    ion = (specid - int(specid)) * 100 + 1
+    lam = info['lam']      # wavelength in Ang
+    loggf = info['loggf']
+    astgf = info.get('astgf')
+    newgf = info.get('newgf')
+    hyp = info.get('hyp')
+    # Pick loggf and add hyperfine component
+    if hyp is None:
+        fhyp = 0.0
+    else:
+        fhyp = hyp
+    if (astgf is not None):
+        gf = astgf + fhyp 
+    elif (newgf is not None):
+        gf = newgf + fhyp 
+    else:
+        gf = loggf + fhyp    
+    ep = info.get('ep')
+    if ep is None:
+        # compute ep from individual energy levels
+        EP1 = info['EP1']
+        J1 = info['J1']        
+        EP2 = info['EP2']
+        J2 = info['J2']
+        # Calculate excitation potential from EP1 and EP2
+        if gu is None: gu = 99
+        if (float(EP1) < 0):
+            ep = -float(EP1); gu = (float(J2) * 2.0) + 1
+        else:
+            ep = float(EP1); gu = (float(J2) * 2.0) + 1
+        if (float(EP2) < 0):
+            EP2 = -float(EP2)
+        if (float(EP2) < float(ep)):
+            ep = float(EP2); gu = (float(J1) * 2.0) + 1        
+    vdW = info.get('vdW')
+    if vdW is None:
+        vdW = 0.0
+    dis = info.get('dis')
+    if dis is None:
+        dis = 0.0
+        
+    # Wavelength in A
+    # line designation
+    # excitation potential in eV
+    # gf or loggf
+    # van der Waals damping parameter
+    # dissociation energy (in eV) for molecules
+    # equivalent width in mA
+        
+    # lambda, specid, ep, loggf, vdW, dissociation energy
+    # Formatted write
+    if freeform==False:
+        fmt = "'{0:10.3e}{1:10.3e}{2:10.3e}{3:10.3e}{4:10.3e}{5:10.3e}"
+    else:
+        fmt = "'{0:10.3e} {1:10.3e} {2:10.3e} {3:10.3e} {4:10.3e} {5:10.3e}"        
+    line = fmt.format(lam,specid,ep,loggf,vdW,dis)
+
+    return line
+
+def writer_vald(info):
+    """ Create the output line for a VALD linelist."""
+
+    # Example VALD linelist from Korg.Ji
+    # 3000.00000, 9000.00000, 19257, 26863354, 1.0 Wavelength region, lines selected, lines processed, Vmicro
+    #                                                  Damping parameters    Lande  Central
+    #Spec Ion       WL_vac(A)  Excit(eV) Vmic log gf* Rad.   Stark   Waals   factor  depth  Reference
+    #'Fe 1',        3000.0414,  3.3014, 1.0, -2.957, 7.280,-3.910,  -7.330,  1.110, 0.270, '   1 wl:K14   1 K14   1 gf:K14   1 K14   1 K14   1 K14   1 K14 Fe            '
+    #'Fe 1',        3000.0639,  2.4327, 1.0, -0.964, 7.670,-4.710,  -7.500,  0.700, 0.972, '   1 wl:K14   1 K14   1 gf:K14   1 K14   1 K14   1 K14   1 K14 Fe            '
+    #'V 1',         3000.1011,  1.1948, 1.0, -0.475, 8.400,-5.870,  -7.690,  1.820, 0.243, '   2 wl:K09   2 K09   2 gf:K09   2 K09   2 K09   2 K09   2 K09 V             '
+    #'Cr 2',        3000.1718,  3.8581, 1.0, -1.487, 8.390,-6.520, 182.231,  1.210, 0.761, '   3 wl:K16   3 K16   4 gf:RU   3 K16   3 K16   3 K16   5 BA-J Cr+           '
+    #'Fe 1',        3000.1980,  3.2671, 1.0, -3.065, 7.270,-3.790,  -7.330,  0.980, 0.238, '   1 wl:K14   1 K14   1 gf:K14   1 K14   1 K14   1 K14   1 K14 Fe            '
+    #'Fe 1',        3000.2891,  2.2786, 1.0, -2.809, 7.990,-5.220,  -7.770,  1.270, 0.872, '   1 wl:K14   1 K14   1 gf:K14   1 K14   1 K14   1 K14   1 K14 Fe            '
+
+    specid = info['specid']
+    # Convert spec1d to VALD format
+    name = num2name[int(specid)]
+    ion = (specid - int(specid)) * 100 + 1
+    lam = info['lam']      # wavelength in Ang
+    loggf = info['loggf']
+    astgf = info.get('astgf')
+    newgf = info.get('newgf')
+    hyp = info.get('hyp')
+    # Pick loggf and add hyperfine component
+    if hyp is None:
+        fhyp = 0.0
+    else:
+        fhyp = hyp
+    if (astgf is not None):
+        gf = astgf + fhyp 
+    elif (newgf is not None):
+        gf = newgf + fhyp 
+    else:
+        gf = loggf + fhyp    
+    ep = info.get('ep')
+    gu = info.get('gu')
+    if ep is None or gu is None:
+        # compute ep from individual energy levels
+        EP1 = info['EP1']
+        J1 = info['J1']        
+        EP2 = info['EP2']
+        J2 = info['J2']
+        # Calculate excitation potential from EP1 and EP2
+        if gu is None: gu = 99
+        if (float(EP1) < 0):
+            ep = -float(EP1); gu = (float(J2) * 2.0) + 1
+        else:
+            ep = float(EP1); gu = (float(J2) * 2.0) + 1
+        if (float(EP2) < 0):
+            EP2 = -float(EP2)
+        if (float(EP2) < float(ep)):
+            ep = float(EP2); gu = (float(J1) * 2.0) + 1        
+    vmicro = info.get('vmicro')
+    if vmicro is None:
+        vmicro = 0.0
+    rad = info.get('rad')
+    if rad is None:
+        rad = 0.0
+    else:
+        rad = 10^(rad)-1
+    stark = info.get('stark')
+    if stark is None:
+        stark = 0.0
+    vdW = info.get('vdW')
+    if vdW is None:
+        vdW = 0.0
+    lande = info.get('lande')
+    if lande is None:
+        lande = 0.0
+    depth = info.get('depth')
+    if depth is None:
+        depth = 0.0
     
-def Line(object):
+    fmt = "'{0:s} {1:s}', {2:.4f}, {3:.4f}, {4:.1f}, {5:.3f}, {6:.f3}, {7:.3f}, {8:.3f}, {9:.3f}, {10:.3f}, {11:.3f}"
+    line = fmt.format(name,ion,lam,ep,vmicro,loggf,rad,stark,vdW,lande,depth)
+    
+    return line
+
+def writer_kurucz(info):
+    """ Create the output line for a kurucz linelist."""
+
+    specid = info['specid']
+    # Convert spec1d to Kurucz format
+    name = num2name[int(specid)]
+    ion = (specid - int(specid)) * 100 + 1
+    lam = info['lam']      # wavelength in Ang
+    loggf = info['loggf']
+    astgf = info.get('astgf')
+    newgf = info.get('newgf')
+    hyp = info.get('hyp')
+    # Pick loggf and add hyperfine component
+    if hyp is None:
+        fhyp = 0.0
+    else:
+        fhyp = hyp
+    if (astgf is not None):
+        gf = astgf + fhyp 
+    elif (newgf is not None):
+        gf = newgf + fhyp 
+    else:
+        gf = loggf + fhyp    
+    ep = info.get('ep')
+    # compute ep from individual energy levels
+    EP1 = info['EP1']
+    J1 = info['J1']
+    label1 = info.get('label1')
+    if label1 is None:
+        label1 = ''
+    EP2 = info['EP2']
+    J2 = info['J2'] 
+    label2 = info.get('label2')
+    if label2 is None:
+        label2 = ''
+    rad = info.get('rad')
+    if rad is None:
+        rad = 0.0
+    stark = info.get('stark')
+    if stark is None:
+        stark = 0.0
+    vdW = info.get('vdW')
+    if vdW is None:
+        vdW = 0.0
+    iso1 = info.get('iso1')
+    if iso1 is None:
+        iso1 = 0.0
+    iso2 = info.get('iso2')
+    if iso2 is None:
+        iso2 = 0.0
+    isofrac = info.get('isofrac')
+    if isofrac is None:
+        isofrac = 0.0
+    landeeven = info.get('landeeven')
+    if landeeven is None:
+        landeeven = 0
+    else:
+        landeeven *= 1e3
+    landeodd = info.get('landeodd')
+    if landeodd is None:
+        landeodd = 0
+    else:
+        landeodd *= 1e3
+    
+    # Atomic line
+    if info['molec']==False:
+
+        # FORMAT(F11.4,F7.3,F6.2,F12.3,F5.2,1X,A10,F12.3,F5.2,1X,A10,
+        # 3F6.2,A4,2I2,I3,F6.3,I3,F6.3,2I5,1X,A1,A1,1X,A1,A1,i1,A3.2I5,I6)
+        # It looks like the last column does not exist
+        #fmt = '(F11.4,F7.3,F6.2,F12.3,F5.2,1X,A10,F12.3,F5.2,1X,A10,'
+        #fmt += '3F6.2,A4,2I2,I3,F6.3,I3,F6.3,2I5,1X,A1,A1,1X,A1,A1,A1,A3,2I5)'
+
+        # Example lines from gf1800.all
+        #  1767.6106 -2.560 18.00  119212.870  3.0 4d  *[3+    124868.680  4.0 7f   [3+    0.00  0.00  0.00KP   0 0  0 0.000  0 0.000    0    0              0    0
+        #  1767.6294 -3.350 18.00  119212.870  3.0 4d  *[3+    124868.620  3.0 7f   [3+    0.00  0.00  0.00KP   0 0  0 0.000  0 0.000    0    0              0    0
+        #  1768.7333 -4.480 18.00  119212.870  3.0 4d  *[3+    124865.090  2.0 7f   [2+    0.00  0.00  0.00KP   0 0  0 0.000  0 0.000    0    0              0    0
+        
+        fmt = "{0:11.4f}{1:7.3f}{2:6.2f}{3:12.3f}{4:5.2f} {5:10s}{6:12.3f}{7:5.2f} {8:10s}{9:6.2f}{10:6.2f}{11:6.2f}"
+        fmt += "     0 0{12:3d}{13:6.3f}{14:3d}{15:6.3f}    0    0         {16:5d}{17:5d}"
+        line = fmt.format(lam,loggf,specid,EP1,J1,label1,EP2,J2,label2, rad,stark,vdW,     iso1,hyp,iso2,isofrac,     landeeven,landeodd)
+        
+    # Molecular line
+    else:
+        fmt = '(F10.4,F7.3,F5.1,F10.3,F5.1,F11.3,I4,A5,3X,A5,3X,I2)'
+        out = utils.fread(line,fmt)
+
+        # 1                                                                   70
+        # ++++++++++^^^^^^^+++++^^^^^^^^^^+++++^^^^^^^^^^^++++^++^+^^^+^^+^+++^^
+        #   433.0318 -3.524 19.5-10563.271 20.5 -33649.772 106X02F2   A02F1   13
+        #   wl(nm)   log gf  J    E(cm-1)   J'   E'(cm-1) code  V      V'     iso
+        #                                                    label   label'
+
+        # Example lines from oh.asc
+        #  205.4189 -7.377  7.5  1029.118  7.5 -49694.545 108X00F1   A07E1   16
+        #  205.4422 -7.692  6.5   767.481  5.5 -49427.380 108X00E1   A07E1   16
+        #  205.6350 -7.441  6.5  1078.515  6.5 -49692.804 108X00E2   A07F2   16
+        
+        # FORMAT(F10.4.F7.3,F5.1,F10.3,F5.1,F11.3,I4,A1,I2,A1,I1,3X,A1,I2,A1,I1,3X,I2)
+        #fmt = '(F10.4,F7.3,F5.1,F10.3,F5.1,F11.3,I4,A1,I2,A1,I1,3X,A1,I2,A1,I1,3X,I2)'
+        # read labels as a single value instead of four
+        #fmt = '(F10.4,F7.3,F5.1,F10.3,F5.1,F11.3,I4,A5,3X,A5,3X,I2)'
+        
+        #lam = out[0]              # wavelength in Ang
+        #loggf = out[1]           # loggf (unitless)
+        #EP1 = out[3]             # first energy level in eV
+        #J1 = out[2]              # J for first level
+        #EP2 = out[5]              # second energy level in eV
+        #J2 = out[4]              # J for second level
+        #code = out[6]            # molecule code (atomic number 1 + 0 + atomic number 2)
+        #label1 = out[7]          # first level label (electronic state, vibrational state, lamba-doubling component, spin state)
+        #label2 = out[8]          # second level label
+        #iso = out[9]             # iso
+        #specid = str(code)+'.'+str(iso)
+
+        code = info.get('code')
+        if code is None:
+            code = specid
+        iso = info.get('iso')
+        if iso is None:
+            iso = 0
+        
+        fmt = "'{0:10.4f}{1:7.3f}{2:5.1f}{3:10.3f}{4:5.1f}{5:11.3f}{6:4d}   {7:5s}   {8:5s}{9:2d}"
+        line = fmt.format(lam,loggf,J1,EP1,J2,EP2,code,label1,label2,iso)
+            
+    return line
+
+def writer_aspcap(info):
+    """ Create the output line for a ASPCAP linelist."""
+    return line
+
+def writer_synspec(info):
+    """ Create the output line for a Synspec linelist."""
+    return line
+
+def writer_turbo(info):
+    """ Create the output line for a Turbospectrum linelist."""
+    return line
+
+
+    
+class Line(object):
 
     def __init__(self,line,format):
         # parse
@@ -751,9 +1053,60 @@ def Line(object):
     def write(self,format):
         """ Write line to a certain output format."""
         pass
+
+class Converter(object):
+
+    def __init__(self,intype,outtype):
+        self.intype = intpye
+        self.outtype = outtype
+        # Check that we can do this conversion
+        self.parser = _parsers[intype]
+        self.writer = _writers[outtype]
         
+    def __call__(self,infile,outfile):
+        # Open input and output files
+        infile = open(infile,'r')
+        outfile = open(outfile,'w')
+        # Loop
+        count = 0
+        hline1 = ''   # turbospectrum header lines
+        hline2 = ''
+        for line in infile:
+            # Turbospectrum has extra lines
+            if self.intype[0:5].lower()=='turbo':
+                if line[0]=="'":
+                    # atomic list
+                    #' 3.0000             '    1         3                        
+                    #'LI I '                                 
+                    # molecular list
+                    #'0608.012016 '            1      7478
+                    #'12C16O Li2015'
+                    if hline1 is not None and hline2 is not None:
+                        hline1 = line
+                        hline2 = None
+                        specid = hline1.split("'")[1].strip()
+                        snum = int(hline1.split("'")[2].split()[1])  # number of lines for this species
+                    else:
+                        hline2 = line
+                    continue
+            # --- Parse the line ----
+            info = self.parser(line)
+            # Add specid for Turbospectrum molecular linelist
+            if self.intype[0:5].lower()=='turbo':
+                if info['molecul']:
+                    info['specid'] = specid
+            # --- Write the new line ----
+            outline = self.writer(line)
+            outfile.write(outline)
+            count += 1
+            
+        # Close files
+        infile.close()
+        outfile.close()
+
+    
 # Class for linelist
-def Linelist(object):
+class Linelist(object):
 
     def __init__(self,filename):
         pass
@@ -769,3 +1122,8 @@ def Linelist(object):
 
 
 # functions to convert to different formats
+
+_parsers = {'moog':parse_moog,'vald',parse_vald,'kurucz':parse_kurucz,'aspcap':parse_aspcap,
+            'synspec':parse_synspec,'turbo':parse_turbo,'turbospectrum':parse_turbo}
+_writers = {'moog':write_moog,'vald':write_vald,'kurucz':write_kurucz,'aspcap':write_aspcap,
+            'synspec':write_synspec,'turbo':write_turbo,'turbospectrum':write_turbo}            
