@@ -30,7 +30,7 @@ def tofloat(val):
     else:
         return float(val)
 
-def parse_moog(line,freeform=False):
+def reader_moog(line,freeform=False):
     """ Parse a single MOOG linelist line and return in standard units."""
     # output in my "standard" units
 
@@ -87,7 +87,7 @@ def parse_moog(line,freeform=False):
     
     return info
 
-def parse_vald(line):
+def reader_vald(line):
     """ Parse a single VALD linelist line and return information in standard units."""
     # output in my "standard" units
 
@@ -130,7 +130,7 @@ def parse_vald(line):
     info['depth'] = depth
     return info
     
-def parse_kurucz(line):
+def reader_kurucz(line):
     """ Parse a single Kurucz linelist line and return information in standard units."""
     # output in my "standard" units
 
@@ -387,7 +387,7 @@ def parse_kurucz(line):
     return info
     
 
-def parse_aspcap(line):
+def reader_aspcap(line):
     """ Parse a single ASPCAP linelist line and return information in standard units."""
 
     #   1-  9 F9.4   nm      Wave    Vacuum wavelength
@@ -508,7 +508,7 @@ def parse_aspcap(line):
     info['landeg2'] = landeg2 
     return info
 
-def parse_synspec(line):
+def reader_synspec(line):
     """ Parse a single synspec linelist line and return information in standard units."""
 
     #from synspec43.f function INILIN
@@ -599,7 +599,7 @@ def parse_synspec(line):
     #  596.0729    606.00 -3.076   29190.339  0.63E+08  0.31E-04  0.10E-06
     #  596.0731    607.00 -5.860   20359.831  0.63E+08  0.31E-04  0.10E-06
 
-    # INLIN_grid is the actual function the reads in the list
+    # INLIN_grid is the actual function that reads in the list
     arr = line.split()
     lam = tofloat(arr[0])
     specid = tofloat(arr[1])
@@ -626,7 +626,7 @@ def parse_synspec(line):
     return info
     
 
-def parse_turbo(line):
+def reader_turbo(line):
     """ Parse a single turbospectrum linelist line and return information in standard units."""
 
     # species,ion,nline
@@ -1031,28 +1031,456 @@ def writer_kurucz(info):
 
 def writer_aspcap(info):
     """ Create the output line for a ASPCAP linelist."""
+
+    #   1-  9 F9.4   nm      Wave    Vacuum wavelength
+    #  11- 17 F7.3   [-]     orggf   ? Original log(gf) value 
+    #  19- 25 F7.3   [-]     newgf   ? Improved literature or laboratory log(gf) 
+    #  27- 30 F4.2   [-]   e_newgf   ? Error in newgf, when available 
+    #  32- 34 A3     ---   r_newgf   Source for newgf
+    #  35- 41 F7.3   [-]     astgf   ? Astrophysical log(gf) 
+    #  43- 45 A3     ---   r_astgf   Source for astrogf 
+    #  47- 54 F8.2   ---     specid  Species identifier
+    #  55- 66 F12.3  cm-1    EP1     Lower Energy Level
+    #  67- 71 F5.1   ---     J1      J value for EP1 
+    #  72- 82 A11    ---     EP1id   EP1 level identification 
+    #  83- 94 F12.3  cm-2    EP2     Upper Energy Level
+    #  95- 99 F5.1   ---     J2      J value for EP2 
+    # 100-110 A11    ---     EP2id   EP2 level identification 
+    # 111-116 F6.2   ---     Rad     ? Damping Rad 
+    # 117-122 F6.2   ---     Sta     ? Damping Stark 
+    # 123-128 F6.2   ---     vdW     ? Damping vdW 
+    # 130-131 I2     ---     unlte   ? NLTE level number upper 
+    # 132-133 I2     ---     lnlte   ? NLTE level number lower 
+    # 134-136 I3     ---     iso1    ? First isotope number 
+    # 137-142 F6.3   [-]     hyp     ? Hyperfine component log fractional strength 
+    # 143-145 I3     ---     iso2    ? Second isotope number 
+    # 146-151 F6.3   [-]     isof    ? Log isotopic abundance fraction  
+    # 152-156 I5     mK      hE1     ? Hyperfine shift for first level to be added to
+    #                                 E1
+    # 157-161 I5     mK      hE2     ? Hyperfine shift for first level to be added to
+    #                                 E2
+    # 162-162 A1     ---     F0      Hyperfine F symbol 
+    # 163-163 I1     ---     F1      ? Hyperfine F for the first level 
+    # 164-164 A1     ---     Note1   Note on character of hyperfine data for first
+    #                                 level (1)
+    # 165-165 A1     ---     S       The symbol "-" for legibility 
+    # 166-166 I1     ---     F2      ? Hyperfine F' for the second level 
+    # 167-167 A1     ---     note2   Note on character of hyperfine data for second
+    #                                 level (1)
+    # 168-172 I5     ---     g1      ? Lande g for first level times 1000 
+    # 173-177 I5     ---     g2      ? Lande g for second level times 1000 
+    # 178-180 A3     ---     vdWorg  Source for the original vdW damping 
+    # 181-186 F6.2   ---     vdWast  ? Astrophysical vdW damping 
+
+    # Example lines
+    #1500.4148  -0.696                  -2.696 Sv3    26.00   52049.820  2.0 s4D)5s g5D   58714.644  3.0 (4F9/4f[3]  8.15 -5.10 -6.63  0 0  0 0.000  0 0.000    0    0       1570 1201RAD      
+    #1500.4157  -3.734                  -3.704 Sey   607.12   35901.223  7.5      X20 2   42566.043  6.5      A22F2                                                                            
+    #1500.4177  -1.672                  -3.672 Sv3    28.00   51124.800  3.0 (1G)sp u3F   57789.611  4.0 s4F)4d g3G  8.31 -5.67 -6.46  0 0  0 0.000  0 0.000    0    0       1084 1059RAD      
+    #1500.4184  -1.460                               606.13   29732.079132.0      3A02F   36396.887133.0      3B05                                                                             
+    #1500.4184  -4.179                  -4.149 Sey   607.13   28928.513 63.5      X12 2   35593.321 63.5      A13E1   
+
+    lam = info.get('lambda')
+    if lam is not None: lam /= 10    # convert from Ang to nm
+    specid = info.get('specid')
+    loggf = info.get('loggf')
+    orggf = info.get('orggf')
+    if orggf is None and loggf is not None:
+        orggf = loggf
+    EP1 = info.get('EP1')
+    if EP1 is not None:
+        EP1 /= 1.2389e-4   # convert eV to cm-1
+    J1 = info.get('J1')
+    EP2 = info.get('EP2')
+    if EP2 is not None:
+        EP2 /= 1.2389e-4   # convert eV to cm-1
+    J2 = info.get('J2')
+
+    # Check that we have the essentials
+    if lambda is None or orggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
+        raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
+
+    # Optional values
+    newgf = info.get('newgf')
+    if newgf is None:
+        newgf = ''
+    else:
+        newgf = '{0:7.3f}'.format(newgf)
+    astgf = info.get('astgf')
+    if astgf is None:
+        astgf = ''
+    else:
+        astgf = '{0:7.3f}'.format(astgf)
+    label1 = info.get('label1')
+    if label1 is None: label1=''        
+    label2 = info.get('label2')    
+    if label2 is None: label2=''
+    rad = info.get('rad')
+    if rad is None:
+        rad = ''
+    else:
+        rad = '{0:6.2f}'.format(rad)
+    stark = info.get('stark')
+    if stark is None:
+        stark = ''
+    else:
+        stark = '{0:6.2f}'.format(stark)
+    vdW = info.get('vdW')
+    if vdW is None:
+        vdW = ''
+    else:
+        vdW = '{0:6.2f}'.format(vdW)
+    iso1 = info.get('iso1')
+    if iso1 is None:
+        iso1 = ''
+    else:
+        iso1 = '{0:3d}'.format(iso1)
+    hyp = info.get('hyp')
+    if hyp is None:
+        hyp = ''
+    else:
+        hyp = '{0:6.3f}'.format(hyp)
+    iso2 = info.get('iso2')
+    if iso2 is None:
+        iso2 = ''
+    else:
+        iso2 = '{0:3d}'.format(iso2)
+    isofrac = info.get('isofrac')
+    if isofrac is None:
+        isofrac = ''
+    else:
+        isofrac = '{0:6.3f}'.format(isofrac)
+    landeg1 = info.get('landeg1')
+    if landeg1 is None:
+        landeg1 = ''
+    else:
+        landeg1 = '{0:5d}'.format(landeg1)
+    landeg2 = info.get('landeg2')
+    if landeg2 is None:
+        landeg2 = ''
+    else:
+        landeg2 = '{0:5d}'.format(landeg2)
+
+    e_newgf,r_newgf,r_astgf,unlte,lnlte = '','','','',''
+    eH1,eH2,F0,F1,note1,S,F2,note2 = '','','','','','','',''
+    vdWorg,vdWast = '',''
+
+    # Essential columns are lambda, orggf, specid, EP1, J1, EP2, J2
+    # Missing values can be left blank    
+    fmt = '{0:9.4f}{1:7.3f}{2:7s}{3:4s}{4:3s}{5:7s}{6:3s}{7:8.2f}{8:12.3f}{9:5.1f}{10:11s}'
+    fmt += '{11:12.3f}{12:5.1f}{13:11s}{14:6s}{15:6s}{16:6s}{17:2s}{18:2s}{19:3s}{20:6s}'
+    fmt += '{21:3s}{22:6s}{23:5s}{24:5s}{25:1s}{26:1s}{27:1s}{28:1s}{29:1s}{30:1s}'
+    fmt += '{31:5s}{32:5s}{33:3s}{34:6s}'
+    line = fmt.format(lam,orggf,newgf,e_newgf,r_newgf,astgf,r_astgf,specid,EP1,J1,label1,EP2,J2,
+                      label2,rad,stark,vdW,unlte,lnlte,iso1,hyp,iso2,isofrac,hE1,hE2,F0,F1,
+                      note1,S,F2,note2,landeg1,landeg2,vdWorg,vdWast)
+    
     return line
 
 def writer_synspec(info):
     """ Create the output line for a Synspec linelist."""
-    return line
+
+    #from synspec43.f function INILIN
+    #C
+    #C     For each line, one (or two) records, containing:
+    #C
+    #C    ALAM    - wavelength (in nm)
+    #C    ANUM    - code of the element and ion (as in Kurucz-Peytremann)
+    #C              (eg. 2.00 = HeI; 26.00 = FeI; 26.01 = FeII; 6.03 = C IV)
+    #C    GF      - log gf
+    #C    EXCL    - excitation potential of the lower level (in cm*-1)
+    #C    QL      - the J quantum number of the lower level
+    #C    EXCU    - excitation potential of the upper level (in cm*-1)
+    #C    QU      - the J quantum number of the upper level
+    #C    AGAM    = 0. - radiation damping taken classical
+    #C            > 0. - the value of Gamma(rad)
+    #C
+    #C     There are now two possibilities, called NEW and OLD, of the next
+    #C     parameters:
+    #C     a) NEW, next parameters are:
+    #C    GS      = 0. - Stark broadening taken classical
+    #C            > 0. - value of log gamma(Stark)
+    #C    GW      = 0. - Van der Waals broadening taken classical
+    #C            > 0. - value of log gamma(VdW)
+    #C    INEXT   = 0  - no other record necessary for a given line
+    #C            > 0  - a second record is present, see below
+    #C
+    #C    The following parameters may or may not be present,
+    #C    in the same line, next to INEXT:
+    #C    ISQL   >= 0  - value for the spin quantum number (2S+1) of lower level
+    #C            < 0  - value for the spin number of the lower level unknown
+    #C    ILQL   >= 0  - value for the L quantum number of lower level
+    #C            < 0  - value for L of the lower level unknown
+    #C    IPQL   >= 0  - value for the parity of lower level
+    #C            < 0  - value for the parity of the lower level unknown
+    #C    ISQU   >= 0  - value for the spin quantum number (2S+1) of upper level
+    #C            < 0  - value for the spin number of the upper level unknown
+    #C    ILQU   >= 0  - value for the L quantum number of upper level
+    #C            < 0  - value for L of the upper level unknown
+    #C    IPQU   >= 0  - value for the parity of upper level
+    #C            < 0  - value for the parity of the upper level unknown
+    #C    (by default, the program finds out whether these quantum numbers
+    #C     are included, but the user can force the program to ignore them
+    #C     if present by setting INLIST=10 or larger
+    #C
+    #C
+    #C    If INEXT was set to >0 then the following record includes:
+    #C    WGR1,WGR2,WGR3,WGR4 - Stark broadening values from Griem (in Angst)
+    #C                   for T=5000,10000,20000,40000 K, respectively;
+    #C                   and n(el)=1e16 for neutrals, =1e17 for ions.
+    #C    ILWN    = 0  - line taken in LTE (default)
+    #C            > 0  - line taken in NLTE, ILWN is then index of the
+    #C                   lower level
+    #C            =-1  - line taken in approx. NLTE, with Doppler K2 function
+    #C            =-2  - line taken in approx. NLTE, with Lorentz K2 function
+    #C    IUN     = 0  - population of the upper level in LTE (default)
+    #C            > 0  - index of the lower level
+    #C    IPRF    = 0  - Stark broadening determined by GS
+    #C            < 0  - Stark broadening determined by WGR1 - WGR4
+    #C            > 0  - index for a special evaluation of the Stark
+    #C                   broadening (in the present version inly for He I -
+    #C                   see procedure GAMHE)
+    #C      b) OLD, next parameters are
+    #C     IPRF,ILWN,IUN - the same meaning as above
+    #C     next record with WGR1-WGR4 - again the same meaning as above
+    #C     (this record is automatically read if IPRF<0
+    #C
+    #C     The only differences between NEW and OLD is the occurence of
+    #C     GS and GW in NEW, and slightly different format of reading.
+    #C
+    #
+    #Looks like it is whitespace delimited, not fixed format
+    #
+    #example from gfallx3_bpo.19
+    #   510.6254  28.01 -1.049  116167.760   1.5  135746.130   1.5   9.03  -5.45  -7.65 0  4  3  0 -1 -1 -1
+    #   510.6254  27.01 -4.201   91425.120   2.0   71846.750   2.0   9.09  -5.82  -7.76 0  5  1 -1  3  1 -1
+    #   510.6270  10.01 -1.820  301855.710   2.5  321434.020   1.5   0.00   0.00   0.00 0  4  2  0 -1 -1 -1
+    #   510.6330  17.01 -1.160  158178.780   1.0  177756.860   1.0   0.00   0.00   0.00 0  3  0  0  3  1  1
+    #   510.6333  24.01 -3.520   89056.020   2.5   69477.950   2.5   8.96  -5.73  -7.71 0  4  4 -1  4  3  0
+    #   510.6455  26.02 -3.495  117950.320   4.0  137527.920   4.0   9.00  -6.67  -7.96 0  1  4  0  3  5  0
+    #   510.6458  26.00 -2.560   56735.154   1.0   37157.564   2.0   8.25  -4.61  -7.45 0  5  2  0  5  1 -1
+    #
+    #example from kmol3_0.01_30.20 
+    #  596.0711    606.00 -6.501    6330.189  0.63E+08  0.31E-04  0.10E-06
+    #  596.0715    606.00 -3.777   11460.560  0.63E+08  0.31E-04  0.10E-06
+    #  596.0719    108.00-11.305    9202.943  0.63E+05  0.30E-07  0.10E-07
+    #  596.0728    606.00 -2.056   35538.333  0.63E+08  0.31E-04  0.10E-06
+    #  596.0729    606.00 -3.076   29190.339  0.63E+08  0.31E-04  0.10E-06
+    #  596.0731    607.00 -5.860   20359.831  0.63E+08  0.31E-04  0.10E-06
+
+    # INLIN_grid is the actual function that reads in the list
+
+    lam = info.get('lambda')
+    if lam is not None: lam /= 10    # convert from Ang to nm
+    specid = info.get('specid')
+    loggf = info.get('loggf')
+    EP1 = info.get('EP1')
+    if EP1 is not None:
+        EP1 /= 1.2389e-4   # convert eV to cm-1
+    J1 = info.get('J1')
+    EP2 = info.get('EP2')
+    if EP2 is not None:
+        EP2 /= 1.2389e-4   # convert eV to cm-1
+    J2 = info.get('J2')
+
+    # Check that we have the essentials
+    if lambda is None or loggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
+        raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
+
+    # Optional values
+    gam = info.get('gam')
+    if gam is None:
+        gam = '   0.00'
+    else:
+        gam = '{0:7.2f}'.format(gam)
+    stark = info.get('stark')
+    if stark is None:
+        stark = '   0.00'
+    else:
+        stark = '{0:7.2f}'.format(stark)
+    vdW = info.get('vdW')
+    if vdW is None:
+        vdW = '   0.00'
+    else:
+        vdW = '{0:7.2f}'.format(vdW)
+    inext = ' 0'
+        
+    # For molecular lines these are blank
+    molec = info.get('molec')
+    if molec is not None and molec is True:
+        gam,stark,vdW,inext = '','','',''
+        
+    # Essential columns are lambda, orggf, specid, EP1, J1, EP2, J2
+    # Missing values can be left blank    
+    fmt = '{0:11.4f}{1:7.2f}{2:7.3f}{3:12.3f}{4:6.1f}{5:12.3f}{6:6.1f}{7:7s}{8:7s}{9:7s}{10:2s}'
+    line = fmt.format(lam,specid,loggf,EP1,J1,EP2,J2,gam,stark,vdW,inext)
+    
+    return line 
 
 def writer_turbo(info):
     """ Create the output line for a Turbospectrum linelist."""
-    return line
+
+    # H I lines with Stark broadening. Special treatment.
+    # species,lele,iel,ion,(isotope(nn),nn=1,natom)
+    
+    # convert VALD to TS format
+    # https://github.com/bertrandplez/Turbospectrum2019/blob/master/Utilities/vald3line-BPz-freeformat.f
+
+    #            write(11,1130) w,chil,gflog,fdamp,
+    #     &      2.*rjupper+1.,gamrad,gamstark,lower,upper,eqw,eqwerr,
+    #     &      element(1:len_trim(element)),
+    #     &      lowcoupling,':',lowdesig(1:len_trim(lowdesig)),
+    #     &      highcoupling,':',highdesig(1:len_trim(highdesig))
+    #* BPz format changed to accomodate extended VdW information
+    #* BPz format changed to accomodate gamstark (Actually log10(gamstark))
+    # 1130       format(f10.3,x,f6.3,x,f6.3,x,f8.3,x,f6.1,x,1p,e9.2,0p,x,
+    #     &             f7.3,
+    #     &             x,'''',a1,'''',x,'''',a1,'''',x,f5.1,x,f6.1,x,'''',
+    #     &             a,x,3a,x,3a,'''')
+
+    # https://marcs.astro.uu.se/documents.php
+    #lambda      E"   log(gf)      2*J'+1                            v' v" branch J" species band
+    #
+    #  (A)      (eV)
+    #
+    #7626.509  0.086 -4.789  0.00   20.0 0.00E+00 'X' 'X'  0.0  1.0 ' 2  0 SR32  8.5 FeH     FX'
+
+    # printf("%10.3f %6.3f %7.3f %9.2f %6.1f %9.2e 'x' 'x' 0.0 1.0 '%2s %3s %11s %11s'\n",lam, ep, gf,vdW, gu, 10^(Rad)-1,type,iontype,EP1id,EP2id)
+    # if (iontype ="II")
+    # printf("%10.3f %6.3f %7.3f %9.2f %6.1f %9.2e 'x' 'x' \n",lam, ep, gf,vdW, gu, 10^(Rad)-1)
+
+    # ASPCAP linelist turbospec.20180901t20.molec
+    #'0607.012014 '            1      5591
+    #'Sneden web '
+    # 15000.983  2.490  -5.316  0.00   48.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
+    # 15000.990  2.802  -3.735  0.00  194.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
+    # 15001.825  2.372  -4.898  0.00   64.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
+    # 15002.223  2.372  -3.390  0.00   64.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
+
+    ##  printf("%10.3f %6.3f %7.3f  1.00 %6.1f %9.2e %6.2f %6.2f 'x' 'x'   0.0    0.0\n",lam, ep, gf, gu, 10^(Rad)-1, sta, vdW)
+    #  printf("%10.3f %6.3f %7.3f  0.00 %6.1f %9.2e    \n",lam, ep, gf, gu,      10^(Rad)-1)
+    
+    # ASPCAP linelist turbospec.20180901t20.atoms
+    #' 2.0000             '    1        20
+    #'HE I '
+    # 15062.414 23.593  -2.804      0.00    1.0  0.00e+00   0.00  'x' 'x' 0.0 1.0 'HE  I                         '
+    # 15062.435 23.593  -2.327      0.00    3.0  0.00e+00   0.00  'x' 'x' 0.0 1.0 'HE  I                         '
+    # 15062.437 23.593  -2.105      0.00    5.0  0.00e+00   0.00  'x' 'x' 0.0 1.0 'HE  I                         '
+    # 15083.656 22.920  -0.842      0.00    3.0  0.00e+00  -3.66  'x' 'x' 0.0 1.0 'HE  I   3s 1S       4p 1P     '
+    #' 3.0000             '    1         3                        
+    #'LI I '                                                      
+    # 16814.155  4.541  -2.790     -5.54    2.0  3.02e+07   0.00  'x' 'x' 0.0 1.0 'LI  I   4d  2D      11p  2P   '
+    # 16814.155  4.541  -3.490     -5.54    4.0  3.02e+07   0.00  'x' 'x' 0.0 1.0 'LI  I   4d  2D      11p  2P   '
+    # 16814.197  4.541  -2.530     -5.54    4.0  2.40e+07   0.00  'x' 'x' 0.0 1.0 'LI  I   4d  2D      11p  2P   '
+    #' 3.0060             '    1        39                        
+    #'LI I '                                                      
+    # 15982.629  4.521  -2.752     -6.25    6.0  5.25e+06  -1.75  'x' 'x' 0.0 1.0 'LI  I   1s2.4p 2P   1s2.12d 2D'
+    # 15982.629  4.521  -3.007     -6.25    4.0  5.25e+06  -1.75  'x' 'x' 0.0 1.0 'LI  I   1s2.4p 2P   1s2.12d 2D'
+
+    # printf("%10.3f %6.3f %7.3f %9.2f %6.1f %9.2e 'x' 'x' 0.0 1.0 '%2s %3s %11s %11s'\n",lam, ep, gf,vdW, gu, 10^(Rad)-1,type,iontype,EP1id,EP2id)
+ 
+    lam = info.get('lambda')    # in Ang
+    specid = info.get('specid')
+    loggf = info.get('loggf')
+    if lam is None or specid is None or loggf is None:
+        raise ValueError('Need lambda, specid and loggf')
+    ep = info.get('ep')
+    gu = info.get('gu')
+    if ep is None or gu is None:
+        # compute ep from individual energy levels
+        EP1 = info.get('EP1')
+        J1 = info.get('J1')  
+        EP2 = info.get('EP2')
+        J2 = info.get('J2')
+        if EP1 is None or J1 is None or EP2 is None or J2 is None:
+            raise ValueError('Need ep and gu OR EP1,J1,EP2,J2')
+        # Calculate excitation potential from EP1 and EP2
+        if gu is None: gu = 99
+        if (float(EP1) < 0):
+            ep = -float(EP1); gu = (float(J2) * 2.0) + 1
+        else:
+            ep = float(EP1); gu = (float(J2) * 2.0) + 1
+        if (float(EP2) < 0):
+            EP2 = -float(EP2)
+        if (float(EP2) < float(ep)):
+            ep = float(EP2); gu = (float(J1) * 2.0) + 1  
+    
+    # Check that we have the essentials
+    if lambda is None or loggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
+        raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
+
+    # Optional values
+    label1 = info.get('label1')
+    if label1 is None: label1=''        
+    label2 = info.get('label2')    
+    if label2 is None: label2=''
+    rad = info.get('rad')
+    if rad is None:
+        rad = 0.0
+    else:
+        rad = 10**rad-1
+    stark = info.get('stark')
+    if stark is None:
+        stark = 0.0
+    vdW = info.get('vdW')
+    if vdW is None:
+        vdW = 0.0
+        
+    # For molecular lines these are blank
+    molec = info.get('molec')
+    if molec is not None and molec is True:
+        # molecular lines only has the first 6 columns
+        # 15000.983  2.490  -5.316  0.00   48.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
+        # 15000.990  2.802  -3.735  0.00  194.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
+        fmt = "{0:10.3f} {1:6.2f} {2:7.3f}  0.00 {3:6.1f}  1.00e+00  0.000  'x' 'x'  0.0  1.0"
+        line = fmt.format(lam,ep,loggf,gu)
+    # atomic lines
+    else:
+        fmt = '{0:10.3f} {1:6.2f} {2:7.3f} {3:9.2f} {4:6.1f} {5:9.2e} {6:7.3f}  '
+        fmt += "'x' 'x' 0.0 1.0 '{7:6s} {8:11s} {9:11s}'"
+        line = fmt.format(lam,ep,loggf,vdW,gu,rad,stark,specid,label1,label2)
+    
+    return line   
 
 
+def get_linelist(filename,intype):
+    """" Get basic information about a linelist."""
+    reader = _readers[intype]
+    infile = open(filename,'r')
+    info = []
+    lcount = 0    
+    charcount = 0
+    for line in infile:
+        # Check for Turbospectrum header lines
+        if line[0]=="'":
+            # header line
+        info1 = reader[line]
+        keep = [info1.get('specid'),info1.get('lambda'),lcount,charcount,len(line)]
+        info.append(keep])
+        lcount += 1
+        charcount += len(line)
+    infile.close()
+    # Put it all into a table
+    dt = [('ind',int),('specid',str,20),('lambda',float),('charstart',int),('length',int)]
+    tab = np.zeros(len(info),dtype=np.dtype(dt))
+    tab[...] = info
+    return info
+        
     
 class Line(object):
 
-    def __init__(self,line,format):
-        # parse
+    def __init__(self,line,intype):
+        self.line = line
+        self.type = intype
+        self.reader = _readers[intype]
+        # parse the information
+        info = self.reader(line)
         # save information
-        pass
+        self.data = info
         
-    def write(self,format):
+    def write(self,outtype):
         """ Write line to a certain output format."""
-        pass
+        writer = _writers[outtype]
+        return writer(self.data)
 
 class Converter(object):
 
@@ -1060,70 +1488,144 @@ class Converter(object):
         self.intype = intpye
         self.outtype = outtype
         # Check that we can do this conversion
-        self.parser = _parsers[intype]
+        self.reader = _readers[intype]
         self.writer = _writers[outtype]
         
     def __call__(self,infile,outfile):
-        # Open input and output files
-        infile = open(infile,'r')
-        outfile = open(outfile,'w')
-        # Loop
-        count = 0
-        hline1 = ''   # turbospectrum header lines
-        hline2 = ''
-        for line in infile:
-            # Turbospectrum has extra lines
-            if self.intype[0:5].lower()=='turbo':
-                if line[0]=="'":
-                    # atomic list
-                    #' 3.0000             '    1         3                        
-                    #'LI I '                                 
-                    # molecular list
-                    #'0608.012016 '            1      7478
-                    #'12C16O Li2015'
-                    if hline1 is not None and hline2 is not None:
-                        hline1 = line
-                        hline2 = None
-                        specid = hline1.split("'")[1].strip()
-                        snum = int(hline1.split("'")[2].split()[1])  # number of lines for this species
-                    else:
-                        hline2 = line
-                    continue
-            # --- Parse the line ----
-            info = self.parser(line)
-            # Add specid for Turbospectrum molecular linelist
-            if self.intype[0:5].lower()=='turbo':
-                if info['molecul']:
-                    info['specid'] = specid
-            # --- Write the new line ----
-            outline = self.writer(line)
-            outfile.write(outline)
-            count += 1
-            
-        # Close files
-        infile.close()
-        outfile.close()
 
-    
+        # Normal out type
+        if self.outtype[0:5].lower() != 'turbo':
+            # Open input and output files
+            infile = open(infile,'r')
+            outfile = open(outfile,'w')
+            # Loop
+            count = 0
+            hline1 = ''   # turbospectrum header lines
+            hline2 = ''
+            for line in infile:
+                # Turbospectrum has extra lines
+                if self.intype[0:5].lower()=='turbo':
+                    if line[0]=="'":
+                        # atomic list
+                        #' 3.0000             '    1         3                        
+                        #'LI I '                                 
+                        # molecular list
+                        #'0608.012016 '            1      7478
+                        #'12C16O Li2015'
+                        if hline1 is not None and hline2 is not None:
+                            hline1 = line
+                            hline2 = None
+                            specid = hline1.split("'")[1].strip()
+                            snum = int(hline1.split("'")[2].split()[1])  # number of lines for this species
+                        else:
+                            hline2 = line
+                        continue
+                # --- Parse the line ----
+                info = self.reader(line)
+                # Add specid for Turbospectrum molecular linelist
+                if self.intype[0:5].lower()=='turbo':
+                    if info['molecul']:
+                        info['specid'] = specid
+                # --- Write the new line ----
+                outline = self.writer(line)
+                outfile.write(outline)
+                count += 1
+            
+            # Close files
+            infile.close()
+            outfile.close()
+
+        # Turbospectrum output
+        #  it groups lines of the same species together
+        else:
+            # Get the info
+            info = get_linelist_info(infile,self.intype)
+            # Group them
+            index = dln.create_index(info['specid'])
+            # Open input and output files
+            infile = open(infile,'r')
+            outfile = open(outfile,'w')
+            # Loop over groups
+            for i in range(len(index['value'])):
+                ind = index['index'][index['lo'][i]:index['hi'][i]+1]
+                nind = len(ind)
+                info1 = info[ind]
+                # Sort by wavelength
+                si = np.argsort(info['lambda'])
+                info1 = info1[si]
+                # Header lines
+
+                # Loop over lines
+                for j in range(nind):
+                    # Go to the right place in the file
+                    infile.seek(info1['charstart'][j])
+                    # Read the line                    
+                    line = infile.readline()
+                    # --- Parse the line ----
+                    info = self.reader(line)
+                    # Add specid for Turbospectrum molecular linelist
+                    if self.intype[0:5].lower()=='turbo':
+                        if info['molecul']:
+                            info['specid'] = specid
+                    # --- Write the new line ----
+                    outline = self.writer(line)
+                    outfile.write(outline)
+                    count += 1
+                    
+            # Close files
+            infile.close()
+            outfile.close()
+
+                    
 # Class for linelist
 class Linelist(object):
 
-    def __init__(self,filename):
-        pass
+    def __init__(self,filename,intype):
+        self.filename = filename
+        self.type = intype
+        self.data = None
 
-    def read(self,filename):
-        pass
-
-    def write(self,filename):
-        pass
+    @cls
+    def read(self,filename,intype):
+        # Open the file
+        infile = open(filename,'r')
+        reader = _readers[intype]
+        info = []
+        # Loop over the lines
+        for line in infile:
+            # Check for turbo spectrum header lines
+            if intype[0:5].lower()=='turbo':
+            else:
+                # Parse the line
+                info1 = reader(line)
+                # Add specid for Turbospectrum molecular linelist
+                if intype[0:5].lower()=='turbo':
+                    if info1['molecul']:
+                    info1['specid'] = specid
+                info.append(info1)
+        # Close the file
+        infile.close()
+        # Convert to a table
         
-    
-# methods to read/write and maybe even convert
+                    
+    def write(self,filename,outtype):
+        """ Write to a file."""
+        if self.data is None:
+            raise ValueError('No data to output.  Read in the data first.')
+            return
+        # Open the output file
+        outfile = open(filename,'w')
+        writer = _writers[outtype]
+        # Loop over the lines
+        for i in range(len(self.data)):
+            info = self.data[i]
+            line = writer(info)
+            outfile.write(line)
+        # Close the file
+        outfile.close()
 
 
-# functions to convert to different formats
-
-_parsers = {'moog':parse_moog,'vald',parse_vald,'kurucz':parse_kurucz,'aspcap':parse_aspcap,
-            'synspec':parse_synspec,'turbo':parse_turbo,'turbospectrum':parse_turbo}
+_readers = {'moog':reader_moog,'vald',reader_vald,'kurucz':reader_kurucz,'aspcap':reader_aspcap,
+            'synspec':reader_synspec,'turbo':reader_turbo,'turbospectrum':reader_turbo}
 _writers = {'moog':write_moog,'vald':write_vald,'kurucz':write_kurucz,'aspcap':write_aspcap,
             'synspec':write_synspec,'turbo':write_turbo,'turbospectrum':write_turbo}            
