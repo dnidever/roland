@@ -1,4 +1,5 @@
 import numpy as np
+from astropy.table import Table,Column,MaskedColumn
 from . import utils
 
 num2name = {1:'H',2:'HE',3:'LI',4:'BE',5:'B ',6:'C ',7:'N ',8:'O ',9:'F ',10:'NE',
@@ -30,6 +31,12 @@ def tofloat(val):
     else:
         return float(val)
 
+def toint(val):
+    if val.strip()=='':
+        return None
+    else:
+        return int(val)
+    
 def reader_moog(line,freeform=False):
     """ Parse a single MOOG linelist line and return in standard units."""
     # output in my "standard" units
@@ -436,28 +443,35 @@ def reader_aspcap(line):
     #1500.4177  -1.672                  -3.672 Sv3    28.00   51124.800  3.0 (1G)sp u3F   57789.611  4.0 s4F)4d g3G  8.31 -5.67 -6.46  0 0  0 0.000  0 0.000    0    0       1084 1059RAD      
     #1500.4184  -1.460                               606.13   29732.079132.0      3A02F   36396.887133.0      3B05                                                                             
     #1500.4184  -4.179                  -4.149 Sey   607.13   28928.513 63.5      X12 2   35593.321 63.5      A13E1   
-    
-    lam = tofloat(line[0:9]) * 10  # convert from nm to Ang
-    orggf = tofloat(line[10:10+7])
-    newgf = tofloat(line[18:18+7])
-    astgf = tofloat(line[34:34+7])
-    specid = tofloat(line[46:46+8])
-    EP1 = tofloat(line[54:54+12]) * 1.2389e-4 # convert from cm-1 to eV
-    J1 = tofloat(line[66:66+5])
-    label1 = line[71:71+11]
-    EP2 = tofloat(line[82:82+12]) * 1.2389e-4 # convert from cm-1 to eV
-    J2 = tofloat(line[94:94+5])
-    label2 = line[99:99+11]
-    rad = tofloat(line[110:110+6])
-    stark = tofloat(line[116:116+6])
-    vdW = tofloat(line[122:122+6])
-    iso1 = tofloat(line[133:133+3])
-    hyp = tofloat(line[136:136+6])
-    iso2 = tofloat(line[143:143+3])
-    isofrac = tofloat(line[145:145+6])
-    landeg1 = tofloat(line[167:167+5])
-    landeg2 = tofloat(line[172:172+5])    
-    
+
+    #fmt = "(F9.4,F7.3,F7.3,F4.2,A3,F7.3,A3,F8.2,F12.3,F5.1,A11,F12.3,F5.1,A11,"
+    #fmt += "F6.2,F6.2,F6.2,I2,I2,I3,F6.3,I3,F6.3,I5,I5,A1,I1,A1,A1,I1,A1,I5,I5,A3,F6.3)"
+    fmt = "(A9,1X,A7,1X,A7,1X,A4,1X,A3,A7,1X,A3,1X,A8,A12,A5,A11,A12,"
+    fmt += "A5,A11,A6,A6,A6,1X,A2,A2,A3,A6,A3,A6,A5,"
+    fmt += "A5,A1,A1,A1,A1,A1,A1,A5,A5,A3,A6)"    
+    out = utils.fread(line,fmt)
+
+    lam = tofloat(out[0]) * 10  # convert from nm to Ang
+    orggf = tofloat(out[1])
+    newgf = tofloat(out[2])
+    astgf = tofloat(out[5])
+    specid = tofloat(out[7])
+    EP1 = tofloat(out[8]) * 1.2389e-4 # convert from cm-1 to eV
+    J1 = tofloat(out[9])
+    label1 = out[10]
+    EP2 = tofloat(out[11]) * 1.2389e-4 # convert from cm-1 to eV
+    J2 = tofloat(out[12])
+    label2 = out[13]
+    rad = tofloat(out[14])
+    stark = tofloat(out[15])
+    vdW = tofloat(out[16])
+    iso1 = tofloat(out[19])
+    hyp = tofloat(out[20])
+    iso2 = tofloat(out[21])
+    isofrac = tofloat(out[22])
+    landeg1 = toint(out[31])
+    landeg2 = toint(out[32])
+     
     # Calculate excitation potential from EP1 and EP2
     if (float(EP1) < 0):
         ep = -float(EP1); gu = (float(J2) * 2.0) + 1
@@ -468,7 +482,6 @@ def reader_aspcap(line):
     if (float(EP2) < float(ep)):
         ep = float(EP2); gu = (float(J1) * 2.0) + 1
     if (J2 == "     " or J1 == "     "): gu = 99
-    ep = ep * 1.2389e-4   # convert from cm-1 to eV
     # Pick loggf and add hyperfine component
     if hyp is None:
         fhyp = 0.0
@@ -485,9 +498,10 @@ def reader_aspcap(line):
     info['id'] = str(specid)         # line identifier
     #info['name'] = name
     info['lambda'] = lam        # wavelength in Ang
-    info['ep'] = ep             # excitation potential in eV
     info['loggf'] = gf          # preferred loggf (unitless)
-    info['gu'] = gu             # ??
+    info['orggf'] = orggf       # original loggf
+    info['newgf'] = newgf       # new loggf    
+    info['astgf'] = astgf       # astrophysical loggf    
     info['EP1'] = EP1
     info['J1'] = J1
     info['label1'] = label1
@@ -497,15 +511,14 @@ def reader_aspcap(line):
     info['rad'] = rad           # Damping Rad (unitless)
     info['stark'] = stark       # Damping Stark (unitless)
     info['vdW'] = vdW           # Damping van der Waal (unitless)
-    info['orggf'] = orggf       # original loggf
-    info['newgf'] = newgf       # new loggf    
-    info['astgf'] = astgf       # astrophysical loggf
     info['iso1'] = iso1
     info['hyp'] = hyp           # Hyperfine component log fractional strength 
     info['iso2'] = iso2
     info['isofrac'] = isofrac
     info['landeg1'] = landeg1
-    info['landeg2'] = landeg2 
+    info['landeg2'] = landeg2
+    info['ep'] = ep             # excitation potential in eV
+    info['gu'] = gu             # ??    
     return info
 
 def reader_synspec(line):
@@ -604,9 +617,9 @@ def reader_synspec(line):
     lam = tofloat(arr[0])
     specid = tofloat(arr[1])
     loggf = tofloat(arr[2])
-    EP1 = tofloat(arr[3])] * 1.2389e-4   # first energy level in eV
+    EP1 = tofloat(arr[3]) * 1.2389e-4   # first energy level in eV
     J1 = tofloat(arr[4])
-    EP2 = tofloat(arr[5])] * 1.2389e-4   # second energy level in eV
+    EP2 = tofloat(arr[5]) * 1.2389e-4   # second energy level in eV
     J2 = tofloat(arr[6])
     gam = tofloat(arr[7])
     stark = tofloat(arr[8])
@@ -1096,7 +1109,7 @@ def writer_aspcap(info):
     J2 = info.get('J2')
 
     # Check that we have the essentials
-    if lambda is None or orggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
+    if lam is None or orggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
         raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
 
     # Optional values
@@ -1283,7 +1296,7 @@ def writer_synspec(info):
     J2 = info.get('J2')
 
     # Check that we have the essentials
-    if lambda is None or loggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
+    if lam is None or loggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
         raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
 
     # Optional values
@@ -1405,7 +1418,7 @@ def writer_turbo(info):
             ep = float(EP2); gu = (float(J1) * 2.0) + 1  
     
     # Check that we have the essentials
-    if lambda is None or loggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
+    if lam is None or loggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
         raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
 
     # Optional values
@@ -1453,9 +1466,10 @@ def get_linelist(filename,intype):
         # Check for Turbospectrum header lines
         if line[0]=="'":
             # header line
+            pass
         info1 = reader[line]
         keep = [info1.get('specid'),info1.get('lambda'),lcount,charcount,len(line)]
-        info.append(keep])
+        info.append(keep)
         lcount += 1
         charcount += len(line)
     infile.close()
@@ -1464,7 +1478,44 @@ def get_linelist(filename,intype):
     tab = np.zeros(len(info),dtype=np.dtype(dt))
     tab[...] = info
     return info
-        
+
+def list2table(info):
+    """ Create a table out of a list of dictionaries."""
+    ninfo = len(info)
+    names = list(info[0].keys())
+    ncols = len(names)
+    # Convert List of Dictionaries to List of Lists
+    # Using list comprehension
+    #data1 = [[key for key in info[0].keys()], *[list(idx.values()) for idx in info]]
+    data1 = [*[list(idx.values()) for idx in info]]    
+    # Transpose
+    data = list(map(list, zip(*data1)))    
+    # Figure out the types
+    types = ncols*[None]
+    # Loop over columns
+    tab = Table()
+    for i in range(ncols):
+        # Get the first non-None value
+        val = next((item for item in data[i] if item is not None),None)
+        if val is None:
+            types[i] = str
+            col = Column(data[i],name=names[i],dtype=types[i])
+        else:
+            types[i] = type(val)
+            if types[i] is str:
+                col = Column(data[i],name=names[i],dtype=types[i])
+            else:
+                if types[i] is int:
+                    mask = [False if item is not None else True for item in data[i]]
+                    dd = [item if item is not None else 0 for item in data[i]]
+                    col = MaskedColumn(dd,mask=mask,name=names[i],dtype=types[i])                    
+                elif types[i] is float:
+                    mask = [False if item is not None else True for item in data[i]]
+                    col = MaskedColumn(data[i],mask=mask,name=names[i],dtype=types[i])
+                else:
+                    col = MaskedColumn(data[i],name=names[i],dtype=types[i])                    
+        tab.add_column(col)
+    return tab
     
 class Line(object):
 
@@ -1585,28 +1636,51 @@ class Linelist(object):
         self.type = intype
         self.data = None
 
-    @cls
-    def read(self,filename,intype):
+    @classmethod
+    def read(cls,filename,intype):
+        if intype[0:5].lower()=='turbo':
+            turbo = True
+        else:
+            turbo = False
         # Open the file
         infile = open(filename,'r')
         reader = _readers[intype]
         info = []
+        hline1 = ''   # turbospectrum header lines
+        hline2 = ''        
         # Loop over the lines
         for line in infile:
             # Check for turbo spectrum header lines
-            if intype[0:5].lower()=='turbo':
+            if turbo and line[0]=="'":
+                # Turbospectrum has extra lines
+                # atomic list
+                #' 3.0000             '    1         3                        
+                #'LI I '                                 
+                # molecular list
+                #'0608.012016 '            1      7478
+                #'12C16O Li2015'
+                if hline1 is not None and hline2 is not None:
+                    hline1 = line
+                    hline2 = None
+                    specid = hline1.split("'")[1].strip()
+                    snum = int(hline1.split("'")[2].split()[1])  # number of lines for this species
+                else:
+                    hline2 = line
+                continue
+            # Regular line
             else:
                 # Parse the line
                 info1 = reader(line)
                 # Add specid for Turbospectrum molecular linelist
-                if intype[0:5].lower()=='turbo':
+                if turbo:
                     if info1['molecul']:
-                    info1['specid'] = specid
+                        info1['specid'] = specid
                 info.append(info1)
         # Close the file
         infile.close()
         # Convert to a table
-        
+        tab = list2table(info)
+        return tab
                     
     def write(self,filename,outtype):
         """ Write to a file."""
@@ -1625,7 +1699,7 @@ class Linelist(object):
         outfile.close()
 
 
-_readers = {'moog':reader_moog,'vald',reader_vald,'kurucz':reader_kurucz,'aspcap':reader_aspcap,
+_readers = {'moog':reader_moog,'vald':reader_vald,'kurucz':reader_kurucz,'aspcap':reader_aspcap,
             'synspec':reader_synspec,'turbo':reader_turbo,'turbospectrum':reader_turbo}
-_writers = {'moog':write_moog,'vald':write_vald,'kurucz':write_kurucz,'aspcap':write_aspcap,
-            'synspec':write_synspec,'turbo':write_turbo,'turbospectrum':write_turbo}            
+_writers = {'moog':writer_moog,'vald':writer_vald,'kurucz':writer_kurucz,'aspcap':writer_aspcap,
+            'synspec':writer_synspec,'turbo':writer_turbo,'turbospectrum':writer_turbo}            
