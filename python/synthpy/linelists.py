@@ -29,7 +29,7 @@ name2num = {'H':1,'He':2,'Li':3,'Be':4,'B':5,'C':6,'N':7,'O':8,'F':9,'Ne':10,
 # most common isotope
 # from https://www.britannica.com/science/isotope
 num2iso = {1:1,2:4,3:7,4:9,5:11,6:12,7:14,8:16,9:19,10:20,11:23,12:24,13:27,14:28,15:31,
-           16:32:,17:35:,18:40,19:39,20:40,21:45,22:48,23:51,24:52,25:55,26:56,27:59,
+           16:32,17:35,18:40,19:39,20:40,21:45,22:48,23:51,24:52,25:55,26:56,27:59,
            28:58,29:63,30:64,31:69,32:74,33:75,34:80,35:79,36:84,37:85,38:88,39:89,
            40:90,41:93,42:98,43:102,44:103,45:106,47:107,48:14,49:115,50:120}
 
@@ -953,9 +953,9 @@ def reader_synspec(line):
         specid = tofloat(arr[1])
         loggf = tofloat(arr[2])
         ep = tofloat(arr[3])     # excitation potential of the lower level (in cm-1)
-        gamrad = tofloat(arr[7])
-        stark = tofloat(arr[8])
-        vdW = tofloat(arr[9])    
+        gamrad = tofloat(arr[4])
+        stark = tofloat(arr[5])
+        vdW = tofloat(arr[6])    
         
         info = {}
         info['id'] = specid
@@ -1057,8 +1057,16 @@ def reader_turbo(line):
 
     # printf("%10.3f %6.3f %7.3f %9.2f %6.1f %9.2e 'x' 'x' 0.0 1.0 '%2s %3s %11s %11s'\n",lam, ep, gf,vdW, gu, 10^(Rad)-1,type,iontype,EP1id,EP2id)
 
-    fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,1X,F7.3,'
-    fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'
+    # Some formats are missing the 7th column (gamstark)
+    lo = line.find("'")
+    if lo<60:
+        # first ' should be at character 53
+        fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,'
+        fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'        
+    else:
+        # first ' should be at character 61
+        fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,1X,F7.3,'
+        fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'
     out = utils.fread(line,fmt)    
     
     lam = out[0]      # wavelength in XX
@@ -1067,12 +1075,16 @@ def reader_turbo(line):
     vdW = out[3]
     gu = out[4]       # 2*rjupper+1
     gamrad = out[5]   # 10^(Rad)+1
-    gamstark = out[6]
-    #lower = out[7]
-    #upper = out[8]
-    specid = out[11]
-    EP1id = out[12]
-    EP2id = out[13]
+    if len(out)==13:
+        gamstark = 0.0
+        specid = out[10]
+        EP1id = out[11]
+        EP2id = out[12]
+    else: # 14 columns with gamstart
+        gamstark = out[6]
+        specid = out[11]
+        EP1id = out[12]
+        EP2id = out[13]        
 
     info = {}
     info['id'] = specid
@@ -1851,7 +1863,7 @@ class Reader(object):
     #>>> for info in Reader('filename.txt','synspec'):
     #...     print(info)
     
-    def __init__(self,filename,intype,sort=False):
+    def __init__(self,filename,intype,sort=False,verbose=False):
         self.filename = filename
         self.intype = intype
         if intype[0:5].lower()=='turbo':
@@ -1862,6 +1874,7 @@ class Reader(object):
             warnings.warn('Not sorting Turbospectrum linelist')
             sort = False
         self.sort = sort
+        self.verbose = verbose
         # We need to return the lines sorted by species for Turbospectrum
         if self.sort:  # get information on all the lines
             self.info = linelist_info(filename)
@@ -1872,7 +1885,7 @@ class Reader(object):
             # Get the sorting
             for i in range(len(idindex['value'])):
                 ind = idindex['index'][idindex['lo'][i]:idindex['hi'][i]+1]
-                index = np.hstack((index,ind]))
+                index = np.hstack((index,ind))
                 position = np.hstack((position,self.info['startpos'][ind]))                
             self.index = index         # line index
             self.position = position   # line start position
@@ -1883,6 +1896,12 @@ class Reader(object):
         self.snum = None
         self.hlines = []
 
+    def __repr__(self):
+        out = self.__class__.__name__
+        out += ' '+f.__repr__()
+        out += ' type='+self.intype+'\n'
+        return out
+        
     def __iter__(self):
         self._count = 0
         return self
@@ -1896,11 +1915,17 @@ class Reader(object):
         
     def __call__(self):
         """ Read the next line and deal with Turbospectrum headers."""
-        # Returning sorted lines, go to position of the next line
-        if self.sort:
-            newpos = self.position[self._count]
-            self.file.seek(newpos)
-        line = self.file.readline()
+        # Loop until we get non-commented and non-blank lines
+        line = ' '
+        while (line[0]=='#' or (line.strip()=='' and line!='')):
+            # Returning sorted lines, go to position of the next line
+            if self.sort:
+                newpos = self.position[self._count]
+                self.file.seek(newpos)
+            line = self.file.readline()
+            # Empty string means we are done
+            if line=='':
+                return None
         # Handle turbospectrum case
         if self.turbo and line[0]=="'":
             # Read header lines until done
@@ -1919,14 +1944,19 @@ class Reader(object):
             #'12C16O Li2015'
             self.hlines = hlines
             self.specid = hlines[0].split("'")[1].strip()
-            self.snum = int(hline1.split("'")[2].split()[1])  # number of lines for this species
+            self.specname = hlines[1].split("'")[1].strip()
+            self.snum = int(hlines[0].split("'")[2].split()[1])  # number of lines for this species
             # The last "line" will be a normal line and prased below
         # Parse the line
         info = self.reader(line)
         # Add species/element information from header line
-        info['id'] = self.specid
+        if self.turbo:
+            info['id'] = self.specid
+            info['name'] = self.specname
+        if self.verbose: print(info)
         return info
-            
+
+    
 class Writer(object):
     """ Write line and handle Turbospectrum headers."""
     
@@ -1945,6 +1975,12 @@ class Writer(object):
         self.allinfo = []
         self.scount = 0        
 
+    def __repr__(self):
+        out = self.__class__.__name__
+        out += ' '+f.__repr__()
+        out += ' type='+self.outtype+'\n'
+        return out
+        
     def __call__(self,info):
         """ The lines must already be sorted species."""
         # This will "cache" the species lines until we reach the end
@@ -2001,6 +2037,11 @@ class Line(object):
         info = self.reader(line)
         # save information
         self.data = info
+
+    def __repr__(self):
+        out = self.__class__.__name__+' type='+self.type+'\n'
+        out += self.data.__repr__()
+        return out
         
     def write(self,outtype):
         """ Write line to a certain output format."""
@@ -2023,6 +2064,10 @@ class Converter(object):
         # Check that we can do this conversion
         #self.reader = _readers[intype]
         #self.writer = _writers[outtype]
+
+    def __repr__(self):
+        out = self.__class__.__name__+' intype='+self.type+' outtype='+self.outtype+'\n'
+        return out
         
     def __call__(self,infile,outfile):
 
@@ -2151,59 +2196,41 @@ class Linelist(object):
         self.data = data
         self.type = intype
 
+    def __repr__(self):
+        out = self.__class__.__name__+' type='+self.type+'\n'
+        out += self.data.__repr__()
+        return out
+        
     @classmethod
-    def read(cls,filename,intype):
+    def read(cls,filename,intype=None):
+        # If no intype given, then read as fits, ascii or pickle based
+        # on the filename extension
+        if intype==None:
+            base,ext = os.path.splitext(os.path.basename(filename))
+            if ext=='fits':
+                data = Table.read(filename)
+                head = fits.getheader(filename,0)
+                intype = head['type']
+                new = Linelist(data,intype)
+                return new
+            elif ext=='pkl':
+                data,intype = dln.unpickle(filename)
+                new = Linelist(data,intype)
+                return new                
+            else:
+                data = Table.read(filename,format='ascii')
+                # Not sure how to determine the type with this one
+                new = Linelist(data,'kurucz')
+                return new                                
+            return
+        # Read using the type information
         data = []
         for info in Reader(filename,intype):
             data.append(info)
         # Convert to a table
-        tab = list2table(self.data)
+        tab = list2table(data)
         new = Linelist(tab,intype)
         return new
-            
-            
-        ## Open the file
-        #infile = open(filename,'r')
-        #reader = _readers[intype]
-        #info = []
-        #hline1 = ''   # turbospectrum header lines
-        #hline2 = ''
-        #hcount = 0
-        ## Loop over the lines
-        #for line in infile:
-        #    # Check for turbo spectrum header lines
-        #    if turbo and line[0]=="'":
-        #        # Turbospectrum has extra lines
-        #        # atomic list
-        #        #' 3.0000             '    1         3                        
-        #        #'LI I '                                 
-        #        # molecular list
-        #        #'0608.012016 '            1      7478
-        #        #'12C16O Li2015'
-        #        if hcount==0:
-        #            hline1 = line
-        #            hline2 = None
-        #            specid = hline1.split("'")[1].strip()
-        #            snum = int(hline1.split("'")[2].split()[1])  # number of lines for this species
-        #        else:
-        #            hline2 = line
-        #        hcount += 1
-        #        continue
-        #    # Regular line
-        #    else:
-        #        hcount = 0
-        #        # Parse the line
-        #        info1 = reader(line)
-        #        # Add specid for Turbospectrum molecular linelist
-        #        if turbo:
-        #            if info1['molecul']:
-        #                info1['id'] = specid
-        #        info.append(info1)
-        ## Close the file
-        #infile.close()
-        ## Convert to a table
-        #tab = list2table(info)
-        #return tab
                     
     def write(self,filename,outtype=None):
         """ Write to a file."""        
@@ -2212,9 +2239,13 @@ class Linelist(object):
         if outtype==None:
             base,ext = os.path.splitext(os.path.basename(filename))
             if ext=='fits':
-                self.data.write(filename,overwrite=True)
+                hdu = fits.HDUList()
+                hdu.append(fits.table_to_hdu(self.data))
+                hdu[0].header['type'] = self.type
+                hdu.writeto(filename,overwrite=True)
+                hdu.close()
             elif ext=='pkl':
-                dln.pickle(filename,self.data)
+                dln.pickle(filename,[self.data,self.type])
             else:
                 self.data.write(filename,overwrite=True,format='ascii')
             return
