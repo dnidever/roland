@@ -1841,7 +1841,7 @@ def list2table(info):
         if val is None:
             # all Nones, use masked floats
             types[i] = float
-            col = MaskedColumn(np.zeros(nrows),name=names[i],dtype=float)
+            col = MaskedColumn(np.zeros(nrows),mask=np.ones(nrows,bool),name=names[i],dtype=float)
         else:
             types[i] = type(val)
             if types[i] is str:
