@@ -1826,8 +1826,7 @@ def list2table(info):
     names = list(info[0].keys())
     ncols = len(names)
     # Convert List of Dictionaries to List of Lists
-    # Using list comprehension
-    #data1 = [[key for key in info[0].keys()], *[list(idx.values()) for idx in info]]
+    #  using list comprehension
     data1 = [*[list(idx.values()) for idx in info]]    
     # Transpose
     data = list(map(list, zip(*data1)))    
@@ -1838,9 +1837,11 @@ def list2table(info):
     for i in range(ncols):
         # Get the first non-None value
         val = next((item for item in data[i] if item is not None),None)
+        nrows = len(data[i])
         if val is None:
-            types[i] = str
-            col = Column(data[i],name=names[i],dtype=types[i])
+            # all Nones, use masked floats
+            types[i] = float
+            col = MaskedColumn(np.zeros(nrows),name=names[i],dtype=float)
         else:
             types[i] = type(val)
             if types[i] is str:
