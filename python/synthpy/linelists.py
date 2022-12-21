@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from collections import OrderedDict
 from astropy.table import Table,Column,MaskedColumn
 from dlnpyutils import utils as dln
 from . import utils
@@ -33,7 +34,7 @@ num2iso = {1:1,2:4,3:7,4:9,5:11,6:12,7:14,8:16,9:19,10:20,11:23,12:24,13:27,14:2
            28:58,29:63,30:64,31:69,32:74,33:75,34:80,35:79,36:84,37:85,38:88,39:89,
            40:90,41:93,42:98,43:102,44:103,45:106,47:107,48:14,49:115,50:120}
 
-aspcap_molidconvert = {'108.16':'108.001016','101.01':'101.001001','101.01':'101.001001',
+aspcap_molidconvert = {'108.16':'108.001016','101.01':'101.001001','101.11':'101.001001',
                        '101.02':'101.001002','114.28':'114.001028','114.29':'114.001029',
                        '114.30':'114.001030','606.12':'606.012012','606.13':'606.012013',
                        '606.33':'606.013013','607.12':'607.012014','607.13':'607.013014',
@@ -49,6 +50,9 @@ aspcap_molidinvert = {v: k for k, v in aspcap_molidconvert.items()}
 # Synspec: 596.0711 
 # Turbospectrum: 606:012013
 
+def read(filename,**kwargs):
+    """ Convenient function for Linelist.read()"""
+    return Linelist.read(filename,**kwargs)
 
 def tofloat(val):
     if val.strip()=='':
@@ -62,6 +66,43 @@ def toint(val):
     else:
         return int(val)
 
+def autoidentifytype(filename):
+    """ Try to automatically figure out the linelist format type."""
+
+    types = ['moog','vald','kurucz','aspcap','synspec','turbo']
+    
+    # Check if the type is in the filename
+    nametype = [f in filename for f in types]
+
+    # Try to read some lines and see if it breaks
+    canread = np.zeros(6,bool)
+    for i,f in enumerate(types):
+        try:
+            data = Linelist.read(filename,f,nmax=20)
+            canread[i] = True
+        except:
+            pass
+
+    if np.sum(nametype)==1 or np.sum(canread)==1:
+        if np.sum(canread)==1:
+            return np.array(types)[canread][0]
+        else:
+            return np.array(types)[nametype][0]
+
+    Warnings.warn('Cannot autoidentify file.  Available formats are: moog, vald, kurucz, aspcap, synspec and turbospectrum')
+        
+    # Use format of file
+    #-VALD:  comma-delimited
+    #-MOOG: only ~5 lines
+    #-ASPCAP: very specific format
+    #-Turbospectrum: the header lines
+    #-synspec: 
+    #-Kurucz: also very specific format
+    lines = dln.readlines(filename,nreadline=20)
+    # use a detailed analysis of the data format to figure out ambiguous cases
+    
+    import pdb; pdb.set_trace()
+    
 def convertto(info,outtype):
     """Convert from our internal standard TO another format"""
 
@@ -72,28 +113,33 @@ def convertto(info,outtype):
     # -- MOOG --
     if outtype=='moog':
         # wave, energy levels, rad already okay
-        # atomic specid already okay, 26.01
-        # change specid, 822.016046 -> 822.01646
-        # triatomic, 10108.0
+        # specid conversions
         specid = str(info['id'])
         num,decimal = specid.split('.')
-        if len(num) % 2 == 1: num='0'+num
-        natom = len(num)//2
-        if natom==2:
-            newid = num+'.0'+decimal[1:3]+decimal[3:5]
+        # atomic specid, convert 3 digit ionization/charge to 1 digit        
+        if int(num)<100:
+            info['id'] = str(num)+'.{0:01d}'.format(int(decimcal))
+        # change specid, 822.016046 -> 822.01646
+        # triatomic, 10108.0
         else:
-            newid = num+'.0'
-        info['id'] = newid        
+            if len(num) % 2 == 1: num='0'+num
+            natom = len(num)//2
+            if natom==2:
+                newid = num+'.0'+decimal[1:3]+decimal[3:5]
+            else:
+                newid = num+'.0'
+            info['id'] = newid        
     # -- VALD --
     elif outtype=='vald':
         # wave, energy levels, rad already okay
-        # change atomic specid, 'Li 1' -> 03.01
+        # specid conversions
         specid = str(info['id'])
         num,decimal = specid.split('.')
         # Atomic line, 'H 1', 'Li 2'
-        if int(num)<99:
+        if int(num)<100:
+            # change atomic specid, 3.000 -> 'Li 1'
             name = num2name[int(num)]
-            newid = name+' '+str(int(decimal))
+            newid = name+' '+str(int(decimal)+1)
         # Molecule, 'OH', 'CN'
         else:
             # I'M NOT SURE WHAT THE VALD MOLECULAR FORMAT IS
@@ -106,14 +152,21 @@ def convertto(info,outtype):
         # lambda from Ang to nm
         info['lambda'] /= 10
         # EP1 and EP2 from eV to cm-1
-        info['EP1'] /= 1.2389e-4
-        info['EP2'] /= 1.2389e-4
+        if 'EP1' in info.keys():
+            info['EP1'] /= 1.2389e-4
+        if 'EP2' in info.keys():
+            info['EP2'] /= 1.2389e-4
         # damping rad already okay
-        # atomic specid already okay, 26.01
-        # change specid, 822.016046 -> 607X04
+        # specid conversions
         specid = str(info['id'])
         num,decimal = specid.split('.')
-        if int(num)>99:
+        # atomic specid convert 3 digit to 2 digit ionization/charge
+        #  (eg. 2.00 = HeI; 26.00 = FeI; 26.01 = FeII; 6.03 = C IV)        
+        if int(num)<100:
+            # convert 3 digit ionization/charge to 2 digits
+            info['id'] = str(num)+'.{0:02d}'.format(int(decimal))
+        # change specid, 822.016046 -> 607X04        
+        else:
             if len(num) % 2 == 1: num='0'+num
             natom = len(num)//2
             # Get default isotope info for diatomic molecules
@@ -128,14 +181,20 @@ def convertto(info,outtype):
         # lambda from Ang to nm
         info['lambda'] /= 10
         # EP1 and EP2 from eV tpo cm-1
-        info['EP1'] /= 1.2389e-4
-        info['EP2'] /= 1.2389e-4
+        if 'EP1' in info.keys():
+            info['EP1'] /= 1.2389e-4
+        if 'EP2' in info.keys():
+            info['EP2'] /= 1.2389e-4
         # damping rad already okay
         # atomic specid already okay, 26.01
-        # change specid, 606.13 -> 606.012013
+
         specid = str(info['id'])
         num,decimal = specid.split('.')
-        if int(num)>99:
+        # atomic, 3 digit ionization/charge to 2 digit
+        if int(njm)<100:
+            info['id'] = str(num)+'.{0:2d}'.format(int(decimal))
+        # change specid, 606.13 -> 606.012013        
+        else:
             # diatomic molecule
             if len(num)<=4:
                 info['id'] = aspcap_molidinvert[str(info['id'])]
@@ -148,15 +207,20 @@ def convertto(info,outtype):
         # lambda from Ang to nm
         info['lambda'] /= 10
         # EP1 and EP2 from eV to cm-1
-        info['EP1'] /= 1.2389e-4
-        info['EP2'] /= 1.2389e-4
+        if 'EP1' in info.keys():
+            info['EP1'] /= 1.2389e-4
+        if 'EP2' in info.keys():
+            info['EP2'] /= 1.2389e-4
         # damping rad already okay
-        # atomic specid already okay, 26.01
-        # change molecular specid
-        # H2O is 10108.00, no isotope info
+        # specid conversions
         specid = str(info['id'])
         num,decimal = specid.split('.')
-        if len(num)>99:
+        # atomic, change 3 digit ionization/charge to 2 digit        
+        if int(num)<100:
+            info['id'] = str(num)+'.{0:02d}'.format(int(decimal))
+        # change molecular specid
+        # H2O is 10108.00, no isotope info            
+        else:
             if len(num) % 2 == 1: num='0'+num
             natom = len(num)//2
             newid = num+'.00'
@@ -165,7 +229,8 @@ def convertto(info,outtype):
     elif outtype=='turbospectrum':
         # wave, energy levels and specid already okay
         # gamrad is 10^(Rad)+1, radiation damping constant
-        info['rad'] = 10**info['rad']+1
+        if 'rad' in info.keys():
+            info['rad'] = 10**info['rad']+1
         # atomic specid already okay, 26.01
         # molecular specid already okay
         # h20 is 010108.000000000, each atom gets 3 digits in decimal
@@ -177,35 +242,41 @@ def convertfrom(info,intype):
     # standard internal format is:
     # wavelength in Ang
     # energy levels in eV
-    # specid in turbospectrum format
+    # specid in turbospectrum format (three digits decimal for ionization/charge or isotopes)
     # -- MOOG --
     if intype=='moog':
         # wave, energy levels, rad already okay
         # make sure logg is on log scale
         if info['loggf'] > 0:
             info['loggf'] = np.log10(info['loggf'])
-        # atomic specid already okay, 26.01
-        # change specid, 822.01646 -> 822.016046
-        # triatomic, 10108.0
+        # specid conversions
         specid = str(info['id'])
-        num,decimal = specid.split('.')
-        if len(num) % 2 == 1: num='0'+num
-        natom = len(num)//2
-        if natom==2:
-            newid = num+'.'+decimal[0:3]+'0'+decimal[3:]
+        num,decimal = specid.split('.')        
+        # atomic specid needs to be modified
+        #  (eg. 2.00 = HeI; 26.00 = FeI; 26.01 = FeII; 6.03 = C IV)
+        if int(num)<100:
+            # convert 2 or 1 digit ionization/charge to 3 digits
+            info['id'] = str(num)+'.'+'{0:03d}'.format(int(decimal))
+        # change specid, 822.01646 -> 822.016046
+        # triatomic, 10108.0            
         else:
-            newid = num+'.000000000'
-        info['id'] = newid        
+            if len(num) % 2 == 1: num='0'+num
+            natom = len(num)//2
+            if natom==2:
+                newid = num+'.'+decimal[0:3]+'0'+decimal[3:]
+            else:
+                newid = num+'.000000000'
+            info['id'] = newid
     # -- VALD --
     elif intype=='vald':
         # wave, energy levels, rad already okay
-        # change atomic specid, 'Li 1' -> 03.01
+        # change atomic specid, 'Li 1' -> 03.000
         specid = str(info['id'])
         name,ion = specid.split()
         # Atomic line, 'H 1', 'Li 2'
         if len(name)==1 or name[1].islower():
             num = name2num[name]
-            newid = '{0:02d}.{1:02d}'.format(num,int(ion))
+            newid = '{0:02d}.{1:03d}'.format(num,int(ion)-1)
         # Molecule, 'OH', 'CN'
         else:
             # I'M NOT SURE WHAT THE VALD MOLECULAR FORMAT IS
@@ -218,14 +289,19 @@ def convertfrom(info,intype):
         # lambda from nm to Ang
         info['lambda'] *= 10
         # EP1 and EP2 from cm-1 to eV
-        info['EP1'] *= 1.2389e-4
-        info['EP2'] *= 1.2389e-4
+        if 'EP1' in info.keys():
+            info['EP1'] *= 1.2389e-4
+        if 'EP2' in info.keys():
+            info['EP2'] *= 1.2389e-4
         # damping rad already okay
-        # atomic specid already okay, 26.01
-        # change specid, 607X04 -> 822.016046
         specid = str(info['id'])
-        num,_ = specid.split('X')
-        if int(num)>99:
+        if '.' in specid:
+            num,decimal = specid.split('.')
+            # convert 2 digits for ionization/charge to 3 digits
+            info['id'] = str(num)+'.{0:03d}'.format(int(decimal))
+        # change specid, 607X04 -> 822.016046
+        else:
+            num,_ = specid.split('X')            
             if len(num) % 2 == 1: num='0'+num
             natom = len(num)//2
             # Get default isotope info for diatomic molecules
@@ -234,7 +310,7 @@ def convertfrom(info,intype):
                 iso1 = num2iso[int(atom1)]
                 atom2 = num[2:4]
                 iso2 = num2iso[int(atom2)]
-                newid = num+'.'+'{0:03d}{1:03d}'.format(iso1,iso2)
+                newid = num+'.{0:03d}{1:03d}'.format(iso1,iso2)
             # No isotope info for triatomic molecules
             else:
                 newid = num+'.000000000'
@@ -244,17 +320,24 @@ def convertfrom(info,intype):
         # lambda from nm to Ang
         info['lambda'] *= 10
         # EP1 and EP2 from cm-1 to eV
-        info['EP1'] *= 1.2389e-4
-        info['EP2'] *= 1.2389e-4
+        if 'EP1' in info.keys():
+            info['EP1'] *= 1.2389e-4
+        if 'EP2' in info.keys():
+            info['EP2'] *= 1.2389e-4
         # damping rad already okay
-        # atomic specid already okay, 26.01
-        # change specid, 606.13 -> 606.012013
+        # specid conversions
         specid = str(info['id'])
         num,decimal = specid.split('.')
-        if int(num)>99:
+        # atomic specid needs to be modified
+        #  (eg. 2.00 = HeI; 26.00 = FeI; 26.01 = FeII; 6.03 = C IV)
+        if int(num)<100:
+            # convert to three digits for the ionization/charge
+            info['id'] = str(num)+'.{0:03d}'.format(int(decimal))
+        # change specid, 606.13 -> 606.012013            
+        else:
             # diatomic molecule
             if len(num)<=4:
-                info['id'] = aspcap_molidconv[str(info['id'])]
+                info['id'] = aspcap_molidconvert[str(info['id'])]
             # triatomic molecule, no isotope information
             else:
                 if len(num) % 2 == 1: num='0'+num
@@ -264,15 +347,22 @@ def convertfrom(info,intype):
         # lambda from nm to Ang
         info['lambda'] *= 10
         # EP1 and EP2 from cm-1 to eV
-        info['EP1'] *= 1.2389e-4
-        info['EP2'] *= 1.2389e-4
+        if 'EP1' in info.keys():
+            info['EP1'] *= 1.2389e-4
+        if 'EP2' in info.keys():
+            info['EP2'] *= 1.2389e-4
         # damping rad already okay
-        # atomic specid already okay, 26.01
-        # change molecular specid
-        # H2O is 10108.00, no isotope info
+        # specid conversions
         specid = str(info['id'])
         num,decimal = specid.split('.')
-        if len(num)>99:
+        # atomic specid needs to be modified
+        #  (eg. 2.00 = HeI; 26.00 = FeI; 26.01 = FeII; 6.03 = C IV)
+        if int(num)<100:
+            # convert to three digits for the ionization/charge
+            info['id'] = str(num)+'.{0:03d}'.format(int(decimal))
+        # change molecular specid
+        # H2O is 10108.00, no isotope info            
+        else:
             if len(num) % 2 == 1: num='0'+num
             natom = len(num)//2
             newid = num+'.'
@@ -291,7 +381,8 @@ def convertfrom(info,intype):
     elif intype=='turbospectrum':
         # wave, energy levels and specid already okay
         # gamrad is 10^(Rad)+1, radiation damping constant
-        info['rad'] = np.log10(info['rad']-1)
+        if 'rad' in info.keys():
+            info['rad'] = np.log10(info['rad']-1)
         # atomic specid already okay, 26.01
         # molecular specid already okay
         # h20 is 010108.000000000, each atom gets 3 digits in decimal
@@ -307,14 +398,14 @@ def turbospecid(specid):
     #'0608.012016 '            1      7478
     #'12C16O Li2015'
     specid = str(specid)
+    num,decimal = specid.split('.')    
     fspecid = float(specid)
-    anum = int(fspecid)
-    decimal = specid[specid.find('.')+1:]
+    anum = int(num)
     # atomic
     if anum<100:
-        newid = '{0:7.4f}  '.format(int(float(specid)))
-        ion = (specid - int(specid)) * 100 + 1        
-        name = num2name[anum]+' '+roman[ion]  # Convert to Roman number
+        newid = '{0:7.4f}  '.format(int(fspecid))
+        ion = (fspecid - anum) * 1000 + 1        
+        name = num2name[anum]+' '+utils.toroman(ion)  # Convert to Roman number
     # molecular
     else:
         # Convert from Kurucz to Turbospectrum molecular ID format
@@ -322,7 +413,7 @@ def turbospecid(specid):
         # Turbospectrum: integer is the two elements, decimal is the two isotopes
         # 108.16 -> 108.001016
         # 606.12 -> 606.012012
-        anum1 = int(float(specid)/100)
+        anum1 = int(fspecid/100)
         anum2 = anum-100*anum1
         newid = '{0:04d}.{1:03d}{2:03d}'.format(anum,anum1,int(decimal))
         
@@ -350,7 +441,7 @@ def reader_moog(line,freeform=False):
     # 6300.310      8.0    0.00    1.78E-10
     if freeform==False:
         lam = tofloat(line[0:10])
-        specid = tofloat(line[10:20])
+        specid = line[10:20].strip()
         ep = tofloat(line[20:30])
         loggf = tofloat(line[30:40])
         vdW = tofloat(line[40:50])
@@ -365,14 +456,14 @@ def reader_moog(line,freeform=False):
     else:
         arr = line.split()
         lam = tofloat(arr[0])
-        specid = tofloat(arr[1])
+        specid = arr[1].strip()
         ep = tofloat(arr[2])
         loggf = tofloat(arr[3])
         vdW = tofloat(arr[4])
         dis = tofloat(arr[5])    
 
     # loggf might be gf, leave it as is
-    info = {}  # start dictionary    
+    info = OrderedDict()  # start dictionary
     info['id'] = specid
     info['lambda'] = lam
     info['ep'] = ep
@@ -410,7 +501,7 @@ def reader_vald(line):
     lande = arr[8]              # Lande factor
     depth = arr[9]              # depth
 
-    info = {}
+    info = OrderedDict()  # start dictionary    
     info['id'] = specid        # line identifier
     info['lambda'] = lam       # wavelength in Ang
     info['ep'] = ep            # excitation potential in eV
@@ -510,11 +601,11 @@ def reader_kurucz(line):
         # FORMAT(F11.4,F7.3,F6.2,F12.3,F5.2,1X,A10,F12.3,F5.2,1X,A10,
         # 3F6.2,A4,2I2,I3,F6.3,I3,F6.3,2I5,1X,A1,A1,1X,A1,A1,i1,A3.2I5,I6)
         # It looks like the last column does not exist
-        fmt = '(F11.4,F7.3,F6.2,F12.3,F5.2,1X,A10,F12.3,F5.2,1X,A10,'
+        fmt = '(F11.4,F7.3,A6,F12.3,F5.2,1X,A10,F12.3,F5.2,1X,A10,'
         fmt += '3F6.2,A4,2I2,I3,F6.3,I3,F6.3,2I5,1X,A1,A1,1X,A1,A1,A1,A3,2I5)'
         out = utils.fread(line,fmt)
 
-        specid = out[2]          # line identifier    
+        specid = out[2].strip()  # line identifier    
         lam = out[0]             # wavelength in nm
         loggf = out[1]           # loggf (unitless)    
         EP1 = out[3]             # first energy level in cm-1
@@ -534,34 +625,19 @@ def reader_kurucz(line):
         landeeven = out[27]      # lande g for the even level * 1000
         landeodd = out[28]       # lande g for the odd level * 1000
 
-        ## Calculate excitation potential from EP1 and EP2
-        #if (float(EP1) < 0):
-        #    ep = -float(EP1); gu = (float(J2) * 2.0) + 1
-        #else:
-        #    ep = float(EP1); gu = (float(J2) * 2.0) + 1
-        #if (float(EP2) < 0):
-        #    EP2 = -float(EP2)
-        #if (float(EP2) < float(ep)):
-        #    ep = float(EP2); gu = (float(J1) * 2.0) + 1
-        ## loggf and add hyperfine component
-        #gf = loggf + hyp
-    
-        info = {}
+        info = OrderedDict()  # start dictionary        
         info['id'] = specid        # line identifier
         info['lambda'] = lam       # wavelength in Ang
-        #info['ep'] = ep           # excitation potential in eV
         info['loggf'] = loggf      # loggf (unitless)
-        #info['gu'] = gu            #
-        info['rad'] = rad          # Damping Rad (unitless)
-        info['stark'] = stark      # Damping Stark (unitless)
-        info['vdW'] = vdW          # Damping van der Waal (unitless)
-        info['orggf'] = loggf      # original loggfy
         info['EP1'] = EP1          # energy level for first line
         info['J1'] = J1            # J for first line
         info['label1'] = label1    # label for first line
         info['EP2'] = EP2          # energy level for second line
         info['J2'] = J2            # J for second line
-        info['label2'] = label2    # label for second line
+        info['label2'] = label2    # label for second line        
+        info['rad'] = rad          # Damping Rad (unitless)
+        info['stark'] = stark      # Damping Stark (unitless)
+        info['vdW'] = vdW          # Damping van der Waal (unitless)
         info['iso'] = iso          # isotope number
         info['hyp'] = hyp          # hyperfine component log fractional strength
         info['iso2'] = iso2        # isotope number  (for diatomics there are two and no hyperfine) 
@@ -663,20 +739,23 @@ def reader_kurucz(line):
     #if (float(EP2) < float(ep)):
     #    ep = float(EP2); gu = (float(J1) * 2.0) + 1
     
-    info = {}
+    info = OrderedDict()  # start dictionary    
     info['id'] = specid        # line identifier
     info['lambda'] = lam       # wavelength in Ang
-    #info['ep'] = ep            # excitation potential in eV
     info['loggf'] = loggf      # loggf (unitless)
-    #info['gu'] = gu            # 
     info['EP1'] = EP1          # 
     info['J1'] = J1
+    info['label1'] = label1
     info['EP2'] = EP2
     info['J2'] = J1    
+    info['label2'] = label2
     info['code'] = code
     info['iso'] = iso
-    info['label2'] = label1
-    info['label1'] = label2
+    info['hyp'] = None   # for consistency with atomic format
+    info['iso2'] = None
+    info['isofrac'] = None
+    info['landeeven'] = None
+    info['landeodd'] = None
     info['type'] = 'kurucz'
     info['molec'] = True    
     return info
@@ -743,7 +822,7 @@ def reader_aspcap(line):
     orggf = tofloat(out[1])
     newgf = tofloat(out[2])
     astgf = tofloat(out[5])
-    specid = tofloat(out[7])
+    specid = out[7]
     EP1 = tofloat(out[8]) * 1.2389e-4 # convert from cm-1 to eV
     J1 = tofloat(out[9])
     label1 = out[10]
@@ -782,7 +861,7 @@ def reader_aspcap(line):
     else:
         gf = orggf + fhyp
 
-    info = {}
+    info = OrderedDict()  # start dictionary    
     info['id'] = str(specid)         # line identifier
     #info['name'] = name
     info['lambda'] = lam        # wavelength in Ang
@@ -799,7 +878,7 @@ def reader_aspcap(line):
     info['rad'] = rad           # Damping Rad (unitless)
     info['stark'] = stark       # Damping Stark (unitless)
     info['vdW'] = vdW           # Damping van der Waal (unitless)
-    info['iso1'] = iso1
+    info['iso'] = iso1
     info['hyp'] = hyp           # Hyperfine component log fractional strength 
     info['iso2'] = iso2
     info['isofrac'] = isofrac
@@ -808,7 +887,7 @@ def reader_aspcap(line):
     #info['ep'] = ep             # excitation potential in eV
     #info['gu'] = gu             # ??
     info['type'] = 'aspcap'
-    if int(specid)>99:
+    if int(float(specid))>99:
         info['molec'] = True
     else:
         info['molec'] = False
@@ -904,7 +983,7 @@ def reader_synspec(line):
     if len(arr)>7:
         # INLIN_grid is the actual function that reads in the list
         lam = tofloat(arr[0])
-        specid = tofloat(arr[1])
+        specid = arr[1]
         loggf = tofloat(arr[2])
         EP1 = tofloat(arr[3])   # first energy level in cm-1
         J1 = tofloat(arr[4])
@@ -914,14 +993,15 @@ def reader_synspec(line):
         stark = tofloat(arr[8])
         vdW = tofloat(arr[9])    
 
-        info = {}
+        info = OrderedDict()  # start dictionary        
         info['id'] = specid
         info['lambda'] = lam
         info['loggf'] = loggf
         info['EP1'] = EP1
         info['J1'] = J1
         info['EP2'] = EP2
-        info['J2'] = J2    
+        info['J2'] = J2
+        info['ep'] = None  # for consistency with molecular format
         info['rad'] = rad
         info['stark'] = stark
         info['vdW'] = vdW
@@ -950,22 +1030,27 @@ def reader_synspec(line):
         #  596.0731    607.00 -5.860   20359.831  0.63E+08  0.31E-04  0.10E-06
 
         lam = tofloat(arr[0])
-        specid = tofloat(arr[1])
+        specid = arr[1]
         loggf = tofloat(arr[2])
         ep = tofloat(arr[3])     # excitation potential of the lower level (in cm-1)
         gamrad = tofloat(arr[4])
         stark = tofloat(arr[5])
         vdW = tofloat(arr[6])    
         
-        info = {}
+        info = OrderedDict()
         info['id'] = specid
         info['lambda'] = lam
         info['loggf'] = loggf
+        # fill in blank values that the atomic version return        
+        info['EP1'] = None
+        info['J1'] = None
+        info['EP2'] = None
+        info['J2'] = None
         info['ep'] = ep
         info['rad'] = gamrad
         info['stark'] = stark
         info['vdW'] = vdW
-        info['type'] = 'synspec'        
+        info['type'] = 'synspec'
         info['molec'] = True
         return info
     
@@ -1026,13 +1111,15 @@ def reader_turbo(line):
         gu = out[4]       # 2*rjupper+1
         gamrad = out[5]   # 10^(Rad)+1
 
-        info = {}
-        info['id'] = 'dumy'
+        info = OrderedDict()  # start dictionary        
+        info['id'] = 'dumy'  # will be filled it by driver program using header line information
         info['lambda'] = lam
         info['ep'] = ep
         info['loggf'] = loggf
+        info['vdW'] = None  # adding for consistency with atomic format
         info['gu'] = gu
         info['rad'] = gamrad
+        info['stark'] = None
         info['type'] = 'turbospectrum'
         info['molec'] = True
         return info
@@ -1086,7 +1173,7 @@ def reader_turbo(line):
         EP1id = out[12]
         EP2id = out[13]        
 
-    info = {}
+    info = OrderedDict()  # start dictionary    
     info['id'] = specid
     info['lambda'] = lam
     info['ep'] = ep
@@ -1121,9 +1208,11 @@ def writer_moog(info,freeform=False):
     # 6300.310  8.0    0.00   1.78E-10  0. 0.  0.
         
     specid = info['id']
+    fspecid = float(specid)
     # Convert spec1d to MOOG format
+    import pdb; pdb.set_trace()
     name = num2name[int(specid)]
-    ion = (specid - int(specid)) * 100 + 1
+    ion = (fspecid - int(specid)) * 100 + 1
     lam = info['lam']      # wavelength in Ang
     loggf = info['loggf']
     astgf = info.get('astgf')
@@ -1175,9 +1264,9 @@ def writer_moog(info,freeform=False):
     # lambda, specid, ep, loggf, vdW, dissociation energy
     # Formatted write
     if freeform==False:
-        fmt = "'{0:10.3e}{1:10.3e}{2:10.3e}{3:10.3e}{4:10.3e}{5:10.3e}"
+        fmt = "'{0:10.3e}{1:10.3e}{2:10.3e}{3:10.3e}{4:10.3e}{5:10.3e}\n"
     else:
-        fmt = "'{0:10.3e} {1:10.3e} {2:10.3e} {3:10.3e} {4:10.3e} {5:10.3e}"        
+        fmt = "'{0:10.3e} {1:10.3e} {2:10.3e} {3:10.3e} {4:10.3e} {5:10.3e}\n"        
     line = fmt.format(lam,specid,ep,loggf,vdW,dis)
 
     return line
@@ -1255,7 +1344,7 @@ def writer_vald(info):
     if depth is None:
         depth = 0.0
     
-    fmt = "'{0:s} {1:s}', {2:.4f}, {3:.4f}, {4:.1f}, {5:.3f}, {6:.f3}, {7:.3f}, {8:.3f}, {9:.3f}, {10:.3f}, {11:.3f}"
+    fmt = "'{0:s} {1:s}', {2:.4f}, {3:.4f}, {4:.1f}, {5:.3f}, {6:.f3}, {7:.3f}, {8:.3f}, {9:.3f}, {10:.3f}, {11:.3f}\n"
     line = fmt.format(name,ion,lam,ep,vmicro,loggf,rad,stark,vdW,lande,depth)
     
     return line
@@ -1304,9 +1393,9 @@ def writer_kurucz(info):
     vdW = info.get('vdW')
     if vdW is None:
         vdW = 0.0
-    iso1 = info.get('iso1')
-    if iso1 is None:
-        iso1 = 0.0
+    iso = info.get('iso')
+    if iso is None:
+        iso = 0.0
     iso2 = info.get('iso2')
     if iso2 is None:
         iso2 = 0.0
@@ -1335,8 +1424,8 @@ def writer_kurucz(info):
         #  1768.7333 -4.480 18.00  119212.870  3.0 4d  *[3+    124865.090  2.0 7f   [2+    0.00  0.00  0.00KP   0 0  0 0.000  0 0.000    0    0              0    0
         
         fmt = "{0:11.4f}{1:7.3f}{2:6.2f}{3:12.3f}{4:5.2f} {5:10s}{6:12.3f}{7:5.2f} {8:10s}{9:6.2f}{10:6.2f}{11:6.2f}"
-        fmt += "     0 0{12:3d}{13:6.3f}{14:3d}{15:6.3f}    0    0         {16:5d}{17:5d}"
-        line = fmt.format(lam,loggf,specid,EP1,J1,label1,EP2,J2,label2, rad,stark,vdW,     iso1,hyp,iso2,isofrac,     landeeven,landeodd)
+        fmt += "     0 0{12:3d}{13:6.3f}{14:3d}{15:6.3f}    0    0         {16:5d}{17:5d}\n"
+        line = fmt.format(lam,loggf,specid,EP1,J1,label1,EP2,J2,label2, rad,stark,vdW,     iso,hyp,iso2,isofrac,     landeeven,landeodd)
         
     # Molecular line
     else:
@@ -1378,7 +1467,7 @@ def writer_kurucz(info):
         if iso is None:
             iso = 0
         
-        fmt = "'{0:10.4f}{1:7.3f}{2:5.1f}{3:10.3f}{4:5.1f}{5:11.3f}{6:4d}   {7:5s}   {8:5s}{9:2d}"
+        fmt = "'{0:10.4f}{1:7.3f}{2:5.1f}{3:10.3f}{4:5.1f}{5:11.3f}{6:4d}   {7:5s}   {8:5s}{9:2d}\n"
         line = fmt.format(lam,loggf,J1,EP1,J2,EP2,code,label1,label2,iso)
             
     return line
@@ -1435,7 +1524,7 @@ def writer_aspcap(info):
 
     lam = info.get('lambda')
     #if lam is not None: lam /= 10    # convert from Ang to nm
-    specid = info.get('specid')
+    specid = info.get('id')
     loggf = info.get('loggf')
     orggf = info.get('orggf')
     if orggf is None and loggf is not None:
@@ -1451,7 +1540,7 @@ def writer_aspcap(info):
 
     # Check that we have the essentials
     if lam is None or orggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
-        raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
+        raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2 for ASPCAP format')
 
     # Optional values
     newgf = info.get('newgf')
@@ -1483,11 +1572,11 @@ def writer_aspcap(info):
         vdW = ''
     else:
         vdW = '{0:6.2f}'.format(vdW)
-    iso1 = info.get('iso1')
-    if iso1 is None:
-        iso1 = ''
+    iso = info.get('iso')
+    if iso is None:
+        iso = ''
     else:
-        iso1 = '{0:3d}'.format(iso1)
+        iso = '{0:3d}'.format(iso)
     hyp = info.get('hyp')
     if hyp is None:
         hyp = ''
@@ -1523,9 +1612,9 @@ def writer_aspcap(info):
     fmt = '{0:9.4f}{1:7.3f}{2:7s}{3:4s}{4:3s}{5:7s}{6:3s}{7:8.2f}{8:12.3f}{9:5.1f}{10:11s}'
     fmt += '{11:12.3f}{12:5.1f}{13:11s}{14:6s}{15:6s}{16:6s}{17:2s}{18:2s}{19:3s}{20:6s}'
     fmt += '{21:3s}{22:6s}{23:5s}{24:5s}{25:1s}{26:1s}{27:1s}{28:1s}{29:1s}{30:1s}'
-    fmt += '{31:5s}{32:5s}{33:3s}{34:6s}'
+    fmt += '{31:5s}{32:5s}{33:3s}{34:6s}\n'
     line = fmt.format(lam,orggf,newgf,e_newgf,r_newgf,astgf,r_astgf,specid,EP1,J1,label1,EP2,J2,
-                      label2,rad,stark,vdW,unlte,lnlte,iso1,hyp,iso2,isofrac,hE1,hE2,F0,F1,
+                      label2,rad,stark,vdW,unlte,lnlte,iso,hyp,iso2,isofrac,hE1,hE2,F0,F1,
                       note1,S,F2,note2,landeg1,landeg2,vdWorg,vdWast)
     
     return line
@@ -1625,7 +1714,7 @@ def writer_synspec(info):
 
     lam = info.get('lambda')
     #if lam is not None: lam /= 10    # convert from Ang to nm
-    specid = info.get('specid')
+    specid = info.get('id')
     loggf = info.get('loggf')
     EP1 = info.get('EP1')
     #if EP1 is not None:
@@ -1638,7 +1727,7 @@ def writer_synspec(info):
 
     # Check that we have the essentials
     if lam is None or loggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
-        raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
+        raise ValueError('Need at least lambda,loggf,id,EP1,J1,EP2,J2 for Synspec format')
 
     # Optional values
     gam = info.get('gam')
@@ -1665,8 +1754,8 @@ def writer_synspec(info):
         
     # Essential columns are lambda, orggf, specid, EP1, J1, EP2, J2
     # Missing values can be left blank    
-    fmt = '{0:11.4f}{1:7.2f}{2:7.3f}{3:12.3f}{4:6.1f}{5:12.3f}{6:6.1f}{7:7s}{8:7s}{9:7s}{10:2s}'
-    line = fmt.format(lam,specid,loggf,EP1,J1,EP2,J2,gam,stark,vdW,inext)
+    fmt = '{0:11.4f}{1:8.2f}{2:8.3f}{3:12.3f}{4:6.1f}{5:12.3f}{6:6.1f}{7:7s}{8:7s}{9:7s}{10:2s}\n'
+    line = fmt.format(lam,float(specid),loggf,EP1,J1,EP2,J2,gam,stark,vdW,inext)
     
     return line 
 
@@ -1731,12 +1820,12 @@ def writer_turbo(info):
     # 15982.629  4.521  -3.007     -6.25    4.0  5.25e+06  -1.75  'x' 'x' 0.0 1.0 'LI  I   1s2.4p 2P   1s2.12d 2D'
 
     # printf("%10.3f %6.3f %7.3f %9.2f %6.1f %9.2e 'x' 'x' 0.0 1.0 '%2s %3s %11s %11s'\n",lam, ep, gf,vdW, gu, 10^(Rad)-1,type,iontype,EP1id,EP2id)
- 
+    
     lam = info.get('lambda')    # in Ang
-    specid = info.get('specid')
+    specid = info.get('id')
     loggf = info.get('loggf')
-    if lam is None or specid is None or loggf is None:
-        raise ValueError('Need lambda, specid and loggf')
+    if lam is None or id is None or loggf is None:
+        raise ValueError('Need lambda, id and loggf for Turbospectrum format')
     ep = info.get('ep')
     gu = info.get('gu')
     if ep is None or gu is None:
@@ -1785,12 +1874,12 @@ def writer_turbo(info):
         # molecular lines only has the first 6 columns
         # 15000.983  2.490  -5.316  0.00   48.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
         # 15000.990  2.802  -3.735  0.00  194.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
-        fmt = "{0:10.3f} {1:6.2f} {2:7.3f}  0.00 {3:6.1f}  1.00e+00  0.000  'x' 'x'  0.0  1.0"
+        fmt = "{0:10.3f} {1:6.2f} {2:7.3f}  0.00 {3:6.1f}  1.00e+00  0.000  'x' 'x'  0.0  1.0\n"
         line = fmt.format(lam,ep,loggf,gu)
     # atomic lines
     else:
         fmt = '{0:10.3f} {1:6.2f} {2:7.3f} {3:9.2f} {4:6.1f} {5:9.2e} {6:7.3f}  '
-        fmt += "'x' 'x' 0.0 1.0 '{7:6s} {8:11s} {9:11s}'"
+        fmt += "'x' 'x' 0.0 1.0 '{7:6s} {8:11s} {9:11s}'\n"
         line = fmt.format(lam,ep,loggf,vdW,gu,rad,stark,specid,label1,label2)
     
     return line   
@@ -1803,22 +1892,22 @@ def linelist_info(filename,intype):
     info = []
     lcount = 0    
     charcount = 0
-    for line in infile:
+    for i,line in enumerate(infile):
         # Check for Turbospectrum header lines
         if line[0]=="'":
             # header line
             pass
-        info1 = reader[line]
-        keep = [info1.get('specid'),info1.get('lambda'),lcount,charcount,len(line)]
+        info1 = reader(line)
+        keep = (i+1,info1.get('id'),info1.get('lambda'),lcount,charcount,len(line))
         info.append(keep)
         lcount += 1
         charcount += len(line)
     infile.close()
     # Put it all into a table
-    dt = [('ind',int),('specid',str,20),('lambda',float),('startpos',int),('length',int)]
+    dt = [('index',int),('id',str,20),('lambda',float),('line',int),('startpos',int),('length',int)]
     tab = np.zeros(len(info),dtype=np.dtype(dt))
     tab[...] = info
-    return info
+    return tab
 
 def list2table(info):
     """ Create a table out of a list of dictionaries."""
@@ -1878,9 +1967,9 @@ class Reader(object):
         self.verbose = verbose
         # We need to return the lines sorted by species for Turbospectrum
         if self.sort:  # get information on all the lines
-            self.info = linelist_info(filename)
+            self.info = linelist_info(filename,intype)
             # Group them, create_index should put the species in the correct order
-            idindex = dln.create_index(info['id'])
+            idindex = dln.create_index(self.info['id'])
             index = np.array([],int)
             position = np.array([],int)
             # Get the sorting
@@ -1918,7 +2007,8 @@ class Reader(object):
         """ Read the next line and deal with Turbospectrum headers."""
         # Loop until we get non-commented and non-blank lines
         line = ' '
-        while (line[0]=='#' or (line.strip()=='' and line!='')):
+        comment = False
+        while (comment or (line.strip()=='' and line!='')):
             # Returning sorted lines, go to position of the next line
             if self.sort:
                 newpos = self.position[self._count]
@@ -1926,7 +2016,14 @@ class Reader(object):
             line = self.file.readline()
             # Empty string means we are done
             if line=='':
-                return None
+                return None            
+            # Check if this is a comment line
+            comment = False
+            if line[0]=='#': comment=True
+            if self.intype=='vald' and line[0]!="'": comment=True
+            if self.intype=='vald' and line[0]=="'":
+                arr = line.split(',')
+                if len(arr)<5: comment=True
         # Handle turbospectrum case
         if self.turbo and line[0]=="'":
             # Read header lines until done
@@ -1984,41 +2081,50 @@ class Writer(object):
         
     def __call__(self,info):
         """ The lines must already be sorted species."""
-        # This will "cache" the species lines until we reach the end
-        #  otherwise we don't know what to put in the header lines
-        if info is None or info=='' or info['id']!= self.specid:
-            # Write out the species lines
-            # Make the header lines
-            # atomic list
-            #' 3.0000             '    1         3                        
-            #'LI I '                                 
-            # molecular list
-            #'0608.012016 '            1      7478
-            #'12C16O Li2015'
-            newid = turbospecid(self.specid)
-            newname = turbospecname(self.specid)
-            self.file.write("'{0:}  ' {1:5d} {2:10d}".format(newid,1,self.scount))
-            self.file.write("'{0:}  '".format(newname))
-            # Loop over the lines and write them out
-            # Sort info by wavelength
-            allinfo = [x for _,x in sorted(zip(self.wave,self.allinfo))]
-            for info1 in allinfo:
-                line = self.writer(info1)
-                self.file.write(line)
+        # Turbospectrum output type
+        if self.turbo:
+            # This will "cache" the species lines until we reach the end
+            #  otherwise we don't know what to put in the header lines
+            if self.scount>0 and (info is None or info=='' or info['id']!= self.specid):
+                # Write out the species lines
+                # Make the header lines
+                # atomic list
+                #' 3.0000             '    1         3                        
+                #'LI I '                                 
+                # molecular list
+                #'0608.012016 '            1      7478
+                #'12C16O Li2015'
+                newid,newname = turbospecid(self.specid)
+                self.file.write("'{0:}  ' {1:5d} {2:10d}".format(newid,1,self.scount))
+                self.file.write("'{0:}  '".format(newname))
+                # Loop over the lines and write them out
+                # Sort info by wavelength
+                allinfo = [x for _,x in sorted(zip(self.wave,self.allinfo))]
+                for info1 in allinfo:
+                    line = self.writer(info1)
+                    self.file.write(line)
+                if info is None or info=='':  # we are DONE
+                    self.close()
+                    return
+                # Save the new line information
+                self.specid = info['id']
+                self.allinfo = [info]
+                self.wave.append(info['lambda'])
+                self.scount = 1
+            # Same type of line as the last one
+            else:
+                self.specid = info['id']
+                self.allinfo.append(info)
+                self.wave.append(info['lambda'])            
+                self.scount += 1
+        # Non-turbospectrum output type
+        else:
             if info is None or info=='':  # we are DONE
                 self.close()
                 return
-            # Save the new line information
-            self.specid = info['id']
-            self.allinfo = [info]
-            self.wave.append(info['lam'])
-            self.scount = 1
-        # Same line
-        else:
-            self.allinfo.append(info)
-            self.wave.append(info['lam'])            
-            self.scount += 1
-
+            line = self.writer(info)
+            self.file.write(line)
+                
     def close(self):
         """ Close the output file."""
         self.file.close()
@@ -2052,12 +2158,12 @@ class Line(object):
 class Converter(object):
 
     def __init__(self,intype,outtype):
-        self.intype = intpye
+        self.intype = intype.lower()
         if intype[0:5].lower()=='turbo':
             self.inturbo = True
         else:
             self.inturbo = False        
-        self.outtype = outtype
+        self.outtype = outtype.lower()
         if outtype[0:5].lower()=='turbo':
             self.outturbo = True
         else:
@@ -2065,9 +2171,18 @@ class Converter(object):
         # Check that we can do this conversion
         #self.reader = _readers[intype]
         #self.writer = _writers[outtype]
-
+        # Turbospectrum needs ep and gu OR EP1,J1,EP2,J2
+        if self.intype=='moog' and self.outturbo:
+            Warnings.warn('Cannot convert MOOG to Turbospectrum')
+            return
+        # Synspec needs lambda,loggf,specid,EP1,J1,EP2,J2
+        if self.intype=='moog' and self.outtype=='synspec':
+            Warnings.warn('Cannot convert MOOG to Synspec')
+            return        
+            
+        
     def __repr__(self):
-        out = self.__class__.__name__+' intype='+self.type+' outtype='+self.outtype+'\n'
+        out = self.__class__.__name__+' intype='+self.intype+' outtype='+self.outtype+'\n'
         return out
         
     def __call__(self,infile,outfile):
@@ -2086,14 +2201,14 @@ class Converter(object):
         # Open the output file
         #  if outputing Turbospectrum, then the list must be
         #  sorted by species.  Reader() does this with sort=True
-        writer = Writer(outfile,outtype)
+        writer = Writer(outfile,self.outtype)
         # Loop over the input file
         #  if output is Turbospectrum, the Reader() will return
         #  lines sorted by species
         for info in Reader(infile,self.intype,sort=self.outturbo):        
             # 1) use convertfrom() to convert to standard units
             # 2) use convertto() to convert to the output format
-            # 3) use Writer() to write to file 
+            # 3) use Writer() to write to file
             info = convertfrom(info,self.intype)
             writer(convertto(info,self.outtype))
         # Let the writer know that we are done
@@ -2196,18 +2311,26 @@ class Linelist(object):
     def __init__(self,data,intype):
         self.data = data
         self.type = intype
+        self.count = 0
 
     def __repr__(self):
         out = self.__class__.__name__+' type='+self.type+'\n'
         out += self.data.__repr__()
         return out
-        
+
+    def __getitem__(self,item):
+        return self.data[item]
+    
+    def __len__(self):
+        return len(self.data)
+    
     @classmethod
-    def read(cls,filename,intype=None):
+    def read(cls,filename,intype=None,nmax=None):
         # If no intype given, then read as fits, ascii or pickle based
         # on the filename extension
-        if intype==None:
-            base,ext = os.path.splitext(os.path.basename(filename))
+        base,ext = os.path.splitext(os.path.basename(filename))
+        
+        if intype is None:
             if ext=='fits':
                 data = Table.read(filename)
                 head = fits.getheader(filename,0)
@@ -2219,15 +2342,14 @@ class Linelist(object):
                 new = Linelist(data,intype)
                 return new                
             else:
-                data = Table.read(filename,format='ascii')
-                # Not sure how to determine the type with this one
-                new = Linelist(data,'kurucz')
-                return new                                
-            return
+                intype = autoidentifytype(filename)
         # Read using the type information
         data = []
+        count = 0
         for info in Reader(filename,intype):
             data.append(info)
+            if nmax is not None and len(data)>=nmax:  # Only read nmax lines
+                break
         # Convert to a table
         tab = list2table(data)
         new = Linelist(tab,intype)
