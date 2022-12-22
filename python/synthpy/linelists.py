@@ -8,6 +8,7 @@ from astropy.io import fits
 from dlnpyutils import utils as dln
 from . import utils
 
+# Dictionary to convert from atomic number to the element short name
 num2name = {1:'H',2:'HE',3:'LI',4:'BE',5:'B ',6:'C ',7:'N ',8:'O ',9:'F ',10:'NE',
             11:'NA',12:'MG',13:'AL',14:'SI',15:'P ',16:'S ',17:'CL',18:'AR',19:'K ',20:'CA',
             21:'SC',22:'TI',23:'V ',24:'CR',25:'MN',26:'FE',27:'CO',28:'NI',29:'CU',30:'ZN',
@@ -19,6 +20,7 @@ num2name = {1:'H',2:'HE',3:'LI',4:'BE',5:'B ',6:'C ',7:'N ',8:'O ',9:'F ',10:'NE
             81:'TL',82:'PB',83:'BI',84:'PO',85:'AT',86:'RN',87:'FR',88:'RA',89:'AC',90:'TH',
             91:'PA',92:'U ',93:'NP',94:'PU',95:'AM',96:'CM',97:'BK',98:'CF',99:'ES',
             101:'HH',106:'CH',108:'OH',114:'SIH',606:'CC',607:'CN',608:'CO',808:'OO',822:'TIO',126:'FEH'}
+# Dictionary to convert from element name to the atomic number
 name2num = {'H':1,'He':2,'Li':3,'Be':4,'B':5,'C':6,'N':7,'O':8,'F':9,'Ne':10,
             'Na':11,'Mg':12,'Al':13,'Si':14,'P':15,'S':16,'Cl':17,'Ar':18,'K':19,'Ca':20,
             'Sc':21,'Ti':22,'V':23,'Cr':24,'Mn':25,'Fe':26,'Co':27,'Ni':28,'Cu':29,'Zn':30,
@@ -30,6 +32,7 @@ name2num = {'H':1,'He':2,'Li':3,'Be':4,'B':5,'C':6,'N':7,'O':8,'F':9,'Ne':10,
             'Tl':81,'Pb':82,'Bi':83,'Po':84,'At':85,'Rn':86,'Fr':87,'Ra':88,'Ac':89,'Th':90,
             'Pa':91,'U':92,'Np':93,'Pu':94,'Am':95,'Cm':96,'Bk':97,'Cf':98,'Es':99,
             'HH':101,'CH':106,'OH':108,'SiH':114,'CC':606,'CN':607,'CO':608,'OO':808,'TiO':822,'FeH':126}
+# Same as name2num but using all CAPS names
 name2numCAPS = dict((k.upper(), v) for k, v in name2num.items())
 # most common isotope
 # from https://www.britannica.com/science/isotope
@@ -38,12 +41,15 @@ num2iso = {1:1,2:4,3:7,4:9,5:11,6:12,7:14,8:16,9:19,10:20,11:23,12:24,13:27,14:2
            28:58,29:63,30:64,31:69,32:74,33:75,34:80,35:79,36:84,37:85,38:88,39:89,
            40:90,41:93,42:98,43:102,44:103,45:106,47:107,48:14,49:115,50:120}
 
+# Dictionary to convert from ASPCAP-style molecular IDs to the internal standard Turbospectrum-like IDs
+#   with 3 digits per atom
 aspcap_molidconvert = {'108.16':'108.001016','101.01':'101.001001','101.11':'101.001001',
                        '101.02':'101.001002','114.28':'114.001028','114.29':'114.001029',
                        '114.30':'114.001030','606.12':'606.012012','606.13':'606.012013',
                        '606.33':'606.013013','607.12':'607.012014','607.13':'607.013014',
                        '607.15':'607.012015','608.12':'608.012016','608.13':'608.013016',
                        '608.17':'608.012017','608.18':'608.012018','126.56':'126.001056'}
+# Inverse of aspcap_molidvert
 aspcap_molidinvert = {v: k for k, v in aspcap_molidconvert.items()}
 
 # Molecular ID formats
@@ -59,6 +65,28 @@ def read(filename,*args,**kwargs):
     return Linelist.read(filename,*args,**kwargs)
 
 def tofloat(val,unit=None):
+    """
+    Convert value to a float if possible.  If it
+    is an empty string, then return None
+
+    Parameters
+    ----------
+    val : str
+       Input value, most likely a string.
+    unit : astropy unit, optional
+       Astropy unit to use for the output value.
+
+    Returns
+    -------
+    outval : str
+       The output value.
+
+    Example
+    -------
+
+    outval = tofloat(val,unit)
+
+    """
     if type(val) is str and val.strip()=='':
         return None
     else:
@@ -68,7 +96,29 @@ def tofloat(val,unit=None):
             return float(val)*unit
 
 def toint(val,unit=None):
-    if val.strip()=='':
+    """
+    Convert value to an integer if possible.  If it
+    is an empty string, then return None
+
+    Parameters
+    ----------
+    val : str
+       Input value, most likely a string.
+    unit : astropy unit, optional
+       Astropy unit to use for the output value.
+
+    Returns
+    -------
+    outval : str
+       The output value.
+
+    Example
+    -------
+
+    outval = toint(val,unit)
+
+    """
+    if type(val) is str and val.strip()=='':
         return None
     else:
         if unit is None:
@@ -84,7 +134,25 @@ def wave_units(lenunit,air):
         return u.def_unit(lenunit.name+'_vacuum',lenunit)
     
 def autoidentifytype(filename):
-    """ Try to automatically figure out the linelist format type."""
+    """
+    Try to automatically figure out the linelist format type.
+
+    Parameters
+    ----------
+    filename : str
+       Name of the linelist file.
+
+    Returns
+    -------
+    type : str
+       The name of the format type.
+
+    Example
+    -------
+
+    type = autoidentifytype('aspcap.txt')
+
+    """
 
     types = ['moog','vald','kurucz','aspcap','synspec','turbo']
     
@@ -130,7 +198,28 @@ def autoidentifytype(filename):
 
     
 def turbospecid(specid):
-    """ Convert specid to Turbospectrum format."""
+    """
+    Convert specid to Turbospectrum format.
+
+    Parameters
+    ----------
+    specid : str
+       The line ID in the internal standard format.  This is Turbospectrum-like
+         with three digits per atom.
+
+    Returns
+    -------
+    newid : str
+       Turbospectrum ID, e.g.  '3.000' or '0608.012016'
+    name : str
+       Turbospectrum name, e.g. 'LI I' or '0608'
+
+    Example
+    -------
+
+    newid,newname = turbospecid(specid)
+
+    """
     # atomic list
     #' 3.0000             '    1         3                        
     #'LI I '                                 
@@ -164,10 +253,33 @@ def turbospecid(specid):
     
     
 def convertto(info,outtype):
-    """Convert from our internal standard TO another format"""
+    """
+    Convert values from our internal standard format TO another linelist format.
+    The internal standard format is:
+    Wavelengths in Ang and vacuum, excitation potentials in eV, and line IDs
+    in Turbospectrum-like format (e.g., 3 decimal digits per atom).
+
+    Parameters
+    ----------
+    info : OrderedDict
+       Linelist information for one line in the "standard internal" format.
+    outtype : str
+       The output linelist format type.
+
+    Returns
+    -------
+    info : OrderedDict
+       Linelist information for one line in the format of the output file type.       
+
+    Example
+    -------
+
+    info = convertto(info,'vald')
+
+    """
 
     # standard internal format is:
-    # wavelength in Ang
+    # wavelength in Ang and vacuum
     # energy levels in eV
     # specid in turbospectrum format
     # -- MOOG --
@@ -323,7 +435,31 @@ def convertto(info,outtype):
     return info
     
 def convertfrom(info,intype):
-    """Convert FROM a format to our internal standard."""
+    """
+    Convert values FROM an input linelist format to our internal standard format:
+    Wavelengths in Ang and vacuum, excitation potentials in eV, and line IDs
+    in Turbospectrum-like format (e.g., 3 decimal digits per atom).
+
+    Parameters
+    ----------
+    info : OrderedDict
+       Linelist information for one line in the format of the input file type.
+    intype : str
+       The input linelist format type.
+    Returns
+    -------
+    info : OrderedDict
+       Linelist information for one line with values converted to 
+       
+    info : OrderedDict
+       Linelist information for one line in the "standard internal" format.
+
+    Example
+    -------
+
+    info = convertfrom(info,'aspcap')
+
+    """
     # standard internal format is:
     # wavelength in Ang
     # energy levels in eV
@@ -506,7 +642,27 @@ def convertfrom(info,intype):
 
 
 def reader_moog(line,freeform=True):
-    """ Parse a single MOOG linelist line and return in standard units."""
+    """
+    Parses a single MOOG linelist line and return a dictionary
+    of the information.
+
+    Parameters
+    ----------
+    line : str
+      The line information in the MOOG format.
+
+    Returns
+    -------
+    info : OrderedDict
+      Information for the linelist line.
+
+    Example
+    -------
+
+    info = reader_moog(line)
+
+    """
+
     # output in my "standard" units
     
     # Wavelength in A (air)
@@ -516,6 +672,7 @@ def reader_moog(line,freeform=True):
     # van der Waals damping parameter
     # dissociation energy (in eV) for molecules
     # equivalent width in mA
+
     
     # A line list near the [O I] feature
     #  last column is comments and ignored
@@ -532,7 +689,7 @@ def reader_moog(line,freeform=True):
         loggf = tofloat(line[30:40])
         vdW = tofloat(line[40:50])
         dis = tofloat(line[50:60])    
-    
+        
     # unformatted read
     # 6299.610  24.0   3.84   1.00E-3   0. 0.  0.
     # 6299.660  40.0   1.520  1.585E-1  0. 0.  0.
@@ -545,8 +702,14 @@ def reader_moog(line,freeform=True):
         specid = arr[1].strip()
         ep = tofloat(arr[2],u.eV)       # excitation potential in eV
         loggf = tofloat(arr[3])
-        vdW = tofloat(arr[4])
-        dis = tofloat(arr[5])    
+        if len(arr)>4:
+            vdW = tofloat(arr[4])
+        else:
+            vdW = None
+        if len(arr)>5:
+            dis = tofloat(arr[5])
+        else:
+            dis = None
 
     # loggf might be gf, leave it as is
     info = OrderedDict()  # start dictionary
@@ -566,7 +729,27 @@ def reader_moog(line,freeform=True):
     return info
 
 def reader_vald(line):
-    """ Parse a single VALD linelist line and return information in standard units."""
+    """
+    Parses a single VALD linelist line and return a dictionary
+    of the information.
+
+    Parameters
+    ----------
+    line : str
+      The line information in the VALD format.
+
+    Returns
+    -------
+    info : OrderedDict
+      Information for the linelist line.
+
+    Example
+    -------
+
+    info = reader_vald(line)
+
+    """
+
     # output in my "standard" units
     
     # Example VALD linelist from Korg.Ji
@@ -660,7 +843,26 @@ def reader_vald(line):
     return info
     
 def reader_kurucz(line):
-    """ Parse a single Kurucz linelist line and return information in standard units."""
+    """
+    Parses a single Kurucz linelist line and return a dictionary
+    of the information.
+
+    Parameters
+    ----------
+    line : str
+      The line information in the Kurucz format.
+
+    Returns
+    -------
+    info : OrderedDict
+      Information for the linelist line.
+
+    Example
+    -------
+
+    info = reader_kurucz(line)
+
+    """
 
     # Kurucz linelist format from here
     # http://kurucz.harvard.edu/linelists.html
@@ -898,7 +1100,26 @@ def reader_kurucz(line):
 
 
 def reader_aspcap(line):
-    """ Parse a single ASPCAP linelist line and return information in standard units."""
+    """
+    Parses a single ASPCAP linelist line and return a dictionary
+    of the information.
+
+    Parameters
+    ----------
+    line : str
+      The line information in the ASPCAP format.
+
+    Returns
+    -------
+    info : OrderedDict
+      Information for the linelist line.
+
+    Example
+    -------
+
+    info = reader_aspcap(line)
+
+    """
 
     #   1-  9 F9.4   nm      Wave    Vacuum wavelength
     #  11- 17 F7.3   [-]     orggf   ? Original log(gf) value 
@@ -1018,7 +1239,26 @@ def reader_aspcap(line):
     return info
 
 def reader_synspec(line):
-    """ Parse a single synspec linelist line and return information in standard units."""
+    """
+    Parses a single Synspec linelist line and return a dictionary
+    of the information.
+
+    Parameters
+    ----------
+    line : str
+      The line information in the Synspec format.
+
+    Returns
+    -------
+    info : OrderedDict
+      Information for the linelist line.
+
+    Example
+    -------
+
+    info = reader_synspec(line)
+
+    """
     
     #from synspec43.f function INILIN
     #C
@@ -1182,7 +1422,26 @@ def reader_synspec(line):
     
 
 def reader_turbo(line):
-    """ Parse a single turbospectrum linelist line and return information in standard units."""
+    """
+    Parses a single Turbospectrum linelist line and return a dictionary
+    of the information.
+
+    Parameters
+    ----------
+    line : str
+      The line information in the Turbospectrum format.
+
+    Returns
+    -------
+    info : OrderedDict
+      Information for the linelist line.
+
+    Example
+    -------
+
+    info = reader_turbo(line)
+
+    """
 
     # species,ion,nline
 
@@ -1365,10 +1624,28 @@ def reader_turbo(line):
     info['molec'] = False
     return info
 
-#################  WRITERS  #####################3
+#################  WRITERS  #####################
 
 def writer_moog(info,freeform=True):
-    """ Create the output line for a MOOG linelist."""
+    """
+    Creates the output line for a MOOG linelist.
+
+    Parameters
+    ----------
+    info : OrderedDict
+      Information for one linelist line.
+
+    Returns
+    -------
+    line : str
+       The line information formatted for the MOOG format.
+
+    Example
+    -------
+
+    line = writer_moog(info)
+
+    """
 
     # A line list near the [O I] feature
     #  last column is comments and ignored
@@ -1434,7 +1711,25 @@ def writer_moog(info,freeform=True):
     return line
 
 def writer_vald(info):
-    """ Create the output line for a VALD linelist."""
+    """
+    Creates the output line for a VALD linelist.
+
+    Parameters
+    ----------
+    info : OrderedDict
+      Information for one linelist line.
+
+    Returns
+    -------
+    line : str
+       The line information formatted for the VALD format.
+
+    Example
+    -------
+
+    line = writer_vald(info)
+
+    """
 
     # Example VALD linelist from Korg.Ji
     # 3000.00000, 9000.00000, 19257, 26863354, 1.0 Wavelength region, lines selected, lines processed, Vmicro
@@ -1497,7 +1792,25 @@ def writer_vald(info):
     return line
 
 def writer_kurucz(info):
-    """ Create the output line for a kurucz linelist."""
+    """
+    Creates the output line for a Kurucz linelist.
+
+    Parameters
+    ----------
+    info : OrderedDict
+      Information for one linelist line.
+
+    Returns
+    -------
+    line : str
+       The line information formatted for the Kurucz format.
+
+    Example
+    -------
+
+    line = writer_kurucz(info)
+
+    """
 
     specid = info['id']
     lam = info['lambda']      # wavelength in Ang
@@ -1624,7 +1937,25 @@ def writer_kurucz(info):
     return line
 
 def writer_aspcap(info):
-    """ Create the output line for a ASPCAP linelist."""
+    """
+    Creates the output line for a ASPCAP linelist.
+
+    Parameters
+    ----------
+    info : OrderedDict
+      Information for one linelist line.
+
+    Returns
+    -------
+    line : str
+       The line information formatted for the ASPCAP format.
+
+    Example
+    -------
+
+    line = writer_aspcap(info)
+
+    """
 
     #   1-  9 F9.4   nm      Wave    Vacuum wavelength
     #  11- 17 F7.3   [-]     orggf   ? Original log(gf) value 
@@ -1778,7 +2109,25 @@ def writer_aspcap(info):
     return line
 
 def writer_synspec(info):
-    """ Create the output line for a Synspec linelist."""
+    """
+    Creates the output line for a Synspec linelist.
+
+    Parameters
+    ----------
+    info : OrderedDict
+      Information for one linelist line.
+
+    Returns
+    -------
+    line : str
+       The line information formatted for the Synspec format.
+
+    Example
+    -------
+
+    line = writer_turbo(info)
+
+    """
 
     #from synspec43.f function INILIN
     #C
@@ -1919,7 +2268,25 @@ def writer_synspec(info):
     return line 
 
 def writer_turbo(info):
-    """ Create the output line for a Turbospectrum linelist."""
+    """
+    Creates the output line for a Turbospectrum linelist.
+
+    Parameters
+    ----------
+    info : OrderedDict
+      Information for one linelist line.
+
+    Returns
+    -------
+    line : str
+       The line information formatted for the Turbospectrum format.
+
+    Example
+    -------
+
+    line = writer_turbo(info)
+
+    """
 
     # H I lines with Stark broadening. Special treatment.
     # species,lele,iel,ion,(isotope(nn),nn=1,natom)
@@ -2045,7 +2412,27 @@ def writer_turbo(info):
 
 
 def linelist_info(filename,intype):
-    """" Get basic information about a linelist."""
+    """"
+    Get basic information about a linelist.
+
+    Parameters
+    ----------
+    filename : str
+       Linelist filename.
+    intype : str
+       Format type of the linelist.
+
+    Returns
+    -------
+    info : table
+       Table of basic information for the linelist.
+
+    Example
+    -------
+
+    info = linelist_info('aspcap1.txt','aspcap')
+
+    """
     reader = _readers[intype]
     with open(filename, 'r') as infile:
         line = infile.readline()
@@ -2071,7 +2458,27 @@ def linelist_info(filename,intype):
     return tab
 
 def list2table(info):
-    """ Create a table out of a list of dictionaries."""
+    """
+    Create a table out of a list of dictionaries.
+
+    Parameters
+    ----------
+    info : list
+       List of OrderedDict dictionaries containing
+         the linelist information provided by the
+         reader.
+
+    Returns
+    -------
+    tab : QTable
+       Table of the linelist information.
+
+    Example
+    -------
+
+    tab = list2table(info)
+
+    """
     ninfo = len(info)
     names = list(info[0].keys())
     ncols = len(names)
@@ -2124,10 +2531,29 @@ def list2table(info):
     return tab
 
 class Reader(object):
-    """ Reader class.  This is meant to be used as an iterator."""
-    #>>> for info in Reader('filename.txt','synspec'):
-    #...     print(info)
+    """
+    This class reads lines from a linelist file.  It is meant
+    to be used as an iterator.
+
+    for info in Reader('filename.txt','synspec'):
+         print(info)
     
+    Parameters
+    ----------
+    filename : str
+       The input filename of the linelist to read.
+    intype : str
+       Linelist format type.
+    sort : boolean, optional
+       Sort the lines by species type.  This is needed if
+         the output filetype is Turbospectrum.
+         Default is False.
+    verbose : boolean, optional
+       Verbose output of the information to the screen.
+         Default is verbose=False.
+
+    """
+
     def __init__(self,filename,intype,sort=False,verbose=False):
         self.filename = filename
         self.intype = intype
@@ -2164,16 +2590,19 @@ class Reader(object):
         self.hlines = []
 
     def __repr__(self):
+        """ Print out the string representation of the Reader object."""        
         out = self.__class__.__name__
         out += ' '+f.__repr__()
         out += ' type='+self.intype+'\n'
         return out
         
     def __iter__(self):
+        """ Return an iterator for the Reader object """
         self._count = 0
         return self
         
     def __next__(self):
+        """ Returns the next value in the iteration. """
         info = self()
         if info is None:
             raise StopIteration
@@ -2182,7 +2611,12 @@ class Reader(object):
         return info
         
     def __call__(self):
-        """ Read the next line and deal with Turbospectrum headers."""
+        """
+        This function reads the next line from the file and deals properly
+        with Turbospectrum headers.  It also ignores comment lines.
+
+        It returns a OrderedDict dictionary of the line information.
+        """
         # Loop until we get non-commented and non-blank lines
         line = ' '
         comment = False
@@ -2250,9 +2684,20 @@ class Reader(object):
 
     
 class Writer(object):
-    """ Write line and handle Turbospectrum headers."""
+    """
+    A class to handle writing of linelist data in various formats.'
+
+    Parameters
+    ----------
+    filename : str
+      Output linelist file name.
+    outtype : str
+      The output linelist format type.
+
+    """
     
     def __init__(self,filename,outtype):
+        """ Initialize the Writer object.  """
         self.filename = filename
         self.outtype = outtype
         if outtype[0:5].lower()=='turbo':
@@ -2269,13 +2714,28 @@ class Writer(object):
         self.scount = 0        
 
     def __repr__(self):
+        """ Print out the string representation of the Writer object."""
         out = self.__class__.__name__
         out += ' '+f.__repr__()
         out += ' type='+self.outtype+'\n'
         return out
         
     def __call__(self,info):
-        """ The lines must already be sorted species."""
+        """
+        Write a line of data to the linelist file.
+        For Turbospectrum output format, the lines must already be
+        sorted by species.
+
+        Parameters
+        ----------
+        info : OrderedDict
+           The dictionary of information to write to the linelist file.
+
+        Returns
+        -------
+        The data is written to the output linelist.
+
+        """
         # Turbospectrum output type
         if self.turbo:
             # This will "cache" the species lines until we reach the end
@@ -2344,23 +2804,23 @@ class Converter(object):
     conv('aspcap1.txt','aspcap_to_vald1.vald')
     conv('aspcap2.txt','aspcap_to_vald2.vald')
 
-    Type 1 use case:
-    Converter('aspcap1.txt','aspcap_to_vald1.vald',intype='aspcap',outtype='vald')
+    Type 2 use case:
+    Converter(infile='aspcap1.txt',outfile='aspcap_to_vald1.vald',intype='aspcap',outtype='vald')
 
     Parameters
     ----------
-    infile : str, optional
-      Name of input filename.
-    outfile : str, optional
-      Name of output filename.
     intype : str, optional
       Input file format.
     outtype : str, optional
       Output file format.
+    infile : str, optional
+      Name of input filename.
+    outfile : str, optional
+      Name of output filename.
 
     """
 
-    def __init__(self,infile=None,outfile=None,intype=None,outtype=None):
+    def __init__(self,intype=None,outtype=None,infile=None,outfile=None):
         if infile is not None and intype is None:
             intype = autoidentifytype(infile)
             self.intype = intype
@@ -2386,10 +2846,10 @@ class Converter(object):
         #  Turbospectrum needs ep and gu OR EP1,J1,EP2,J2
         #  ASPCAP needs EP1,J1,EP2,J2
         # MOOG can only be converted to VALD
-        if self.intype=='moog' and self.outtype in ['kurucz','synspec','turbo','aspcap']:
+        if self.intype=='moog' and self.outtype in ['kurucz','synspec','aspcap','turbo']:
             raise Exception('Cannot convert MOOG to Kurucz/Synspec/ASPCAP/Turbospectrum')
         # VALD can only be converted to MOOG
-        if self.intype=='vald' and self.outtype in ['kurucz','synspec','turbo','aspcap']:
+        if self.intype=='vald' and self.outtype in ['kurucz','synspec','aspcap','turbo']:
             raise Exception('Cannot convert VALD to Kurucz/Synspec/ASPCAP/Turbospectrum')
         # Cannot do Synspec -> Kurucz
         if self.intype=='synspec' and self.outtype in ['kurucz','aspcap','turbo']:
@@ -2430,6 +2890,9 @@ class Converter(object):
              conv('aspcap1.txt','vald1.txt')
 
         """
+
+        if os.path.exists(infile)==False:
+            raise ValueError(infile+' NOT FOUND')
         
         # Use Reader() and Writer() classes
         # if turbospectrum output, then you need
@@ -2532,6 +2995,8 @@ class Linelist(object):
         line = Linelist.read('synspec1.txt')
 
         """
+        if os.path.exists(filename)==False:
+            raise ValueError(filename+' NOT FOUND')
         # If no intype given, then read as fits, ascii or pickle based
         # on the filename extension
         base,ext = os.path.splitext(os.path.basename(filename))        
