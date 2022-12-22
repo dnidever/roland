@@ -92,13 +92,14 @@ def autoidentifytype(filename):
     nametype = [f in filename.lower() for f in types]
 
     # Try to read some lines and see if it breaks
-    canread = np.zeros(6,bool)
-    for i,f in enumerate(types):
-        try:
-            data = Linelist.read(filename,f,nmax=20)
-            canread[i] = True
-        except:
-            pass
+    canread = np.zeros(6,bool)    
+    if os.path.exists(filename):
+        for i,f in enumerate(types):
+            try:
+                data = Linelist.read(filename,f,nmax=20)
+                canread[i] = True
+            except:
+                pass
 
     if (np.sum(nametype)==1 or np.sum(canread)==1) and np.sum(canread)>0:
         if np.sum(canread)==1:
@@ -2323,36 +2324,49 @@ class Writer(object):
         """ Close the output file."""
         self.file.close()
 
-            
-class Line(object):
-
-    def __init__(self,line,intype):
-        self.line = line
-        self.type = intype
-        if intype[0:5].lower()=='turbo':
-            self.type = 'turbo'
-            self.turbo = True
-        else:
-            self.turbo = False
-        self.reader = _readers[intype]
-        # parse the information
-        info = self.reader(line)
-        # save information
-        self.data = info
-
-    def __repr__(self):
-        out = self.__class__.__name__+' type='+self.type+'\n'
-        out += self.data.__repr__()
-        return out
-        
-    def write(self,outtype):
-        """ Write line to a certain output format."""
-        writer = _writers[outtype]
-        return writer(self.data)
 
 class Converter(object):
+    """
+    A class to convert a linelist from one format to another.  The supported formats
+    are: MOOG, VALD, Kurucz, ASPCAP, Synspec and Turbospectrum.
 
-    def __init__(self,intype,outtype):
+    There are two ways that Converter can be used: (1) set up a converter instance and
+    then use the call method to convert one file to another.  The converter can be used
+    multiple times to make the same type of version (e.g., ASPCAP->VALD) for multiple
+    files. (2) Run the converter directly by giving the filenames and if necessary the
+    formats.
+
+    The format can be determined automatically, most of the time, from the file names
+    and/or the file structure itself.
+
+    Type 1 use case:
+    conv = Converter('aspcap','vald')
+    conv('aspcap1.txt','aspcap_to_vald1.vald')
+    conv('aspcap2.txt','aspcap_to_vald2.vald')
+
+    Type 1 use case:
+    Converter('aspcap1.txt','aspcap_to_vald1.vald',intype='aspcap',outtype='vald')
+
+    Parameters
+    ----------
+    infile : str, optional
+      Name of input filename.
+    outfile : str, optional
+      Name of output filename.
+    intype : str, optional
+      Input file format.
+    outtype : str, optional
+      Output file format.
+
+    """
+
+    def __init__(self,infile=None,outfile=None,intype=None,outtype=None):
+        if infile is not None and intype is None:
+            intype = autoidentifytype(infile)
+            self.intype = intype
+        if outfile is not None and outtype is None:
+            outtype = autoidentifytype(outfile)
+            self.outtype = outtype
         self.intype = intype.lower()
         if intype[0:5].lower()=='turbo':
             self.intype = 'turbo'
@@ -2385,13 +2399,38 @@ class Converter(object):
         if self.inturbo and self.outtype=='synspec':
             raise Exception('Cannot convert Turbospectrum to Synspec')
 
+        # If infile and outfile were given, then convert directly
+        if infile is not None and outfile is not None:
+            self(infile,outfile)
         
     def __repr__(self):
+        """ Print out the string representation of the Converter object."""
         out = self.__class__.__name__+' intype='+self.intype+' outtype='+self.outtype+'\n'
         return out
         
     def __call__(self,infile,outfile):
+        """
+        Perform the translation/conversion from an input linelist to an output file.
 
+        Parameters
+        ----------
+        infile : str
+           Input filename.
+        outfile : str
+           Output filename.
+
+        Returns
+        -------
+        Nothing is returned.  A converted file is created with the output filename.
+
+        Example
+        -------
+        .. code-block:: python
+
+             conv('aspcap1.txt','vald1.txt')
+
+        """
+        
         # Use Reader() and Writer() classes
         # if turbospectrum output, then you need
         # sort by species and wavelength before
@@ -2423,8 +2462,22 @@ class Converter(object):
                     
 # Class for linelist
 class Linelist(object):
+    """
+    A class to represent a linelist with read and write methods.
 
+    The linelist data can be accessed like an astropy table.
+
+    Parameters
+    ----------
+    data : list
+       List of dictionaries or table with the information.
+    intype : str
+       Linelist format type (moog, vald, kurucz, aspcap, sysnpec, or turbospectrum).
+
+    """
+    
     def __init__(self,data,intype):
+        """ Initialize Linelist object."""
         self.data = data
         self.type = intype.lower()
         if self.type[0:5]=='turbo':
@@ -2435,21 +2488,50 @@ class Linelist(object):
         self.count = 0
 
     def __repr__(self):
+        """ Print out the string representation of the Linelist object."""
         out = self.__class__.__name__+' type='+self.type+'\n'
         out += self.data.__repr__()
         return out
 
     def __getitem__(self,key):
+        """ Get data from the linelist. """
         return self.data[key]
 
     def __setitem__(self,key,val):
+        """ Set data in the linelist. """
         self.data[key] = val
     
     def __len__(self):
+        """ Return the number of rows in the linelist."""
         return len(self.data)
     
     @classmethod
     def read(cls,filename,intype=None,nmax=None):
+        """
+        Method to read in a linelist file.  This is a class method.
+
+        Parameters
+        ----------
+        filename : str
+           Name of the linelist file to load.
+        intype : str, optional
+           Format of the linelist.  This is optional since there is an
+             auto-identification feature.
+        nmax : int, optional
+           Only read nmax lines of the list.  The default is to read
+             all of the lines.
+
+        Returns
+        -------
+        new : Linelist object
+           The Linelist object is returned.
+
+        Example
+        -------
+
+        line = Linelist.read('synspec1.txt')
+
+        """
         # If no intype given, then read as fits, ascii or pickle based
         # on the filename extension
         base,ext = os.path.splitext(os.path.basename(filename))        
@@ -2486,22 +2568,47 @@ class Linelist(object):
         return new
                     
     def write(self,filename,outtype=None):
-        """ Write to a file."""
+        """
+        Write to a file.
+
+        Parameters
+        ----------
+        filename : str
+           Output filename.
+        outtype : str, optional
+           Format of the output file.  This is optional if the type
+             can be determined from the filename itself.
+             Supported format is moog, vald, kurucz, aspcap, synspec,
+             turbospectrum, fits, pkl or ascii.
+
+        Returns
+        -------
+        Nothing is returned.  The linelist information is written to
+        the output file.
+
+        Example
+        -------
+
+        line.write('linelist.aspcap')
+
+        """
         # If no outtype given, then write as fits, ascii or pickle based
         # on the filename extension
-        if outtype==None:
+        if outtype is None or outtype in ['fits','pkl','ascii']:
             base,ext = os.path.splitext(os.path.basename(filename))
-            if ext=='.fits':
+            if ext=='.fits' or outtype=='fits':
                 hdu = fits.HDUList()
                 hdu.append(fits.table_to_hdu(self.data))
                 hdu[0].header['type'] = self.type
                 hdu[0].header['wunit'] = self.data['lambda'][0].unit.name
                 hdu.writeto(filename,overwrite=True)
                 hdu.close()
-            elif ext=='.pkl':
+            elif ext=='.pkl' or outtype=='pkl':
                 dln.pickle(filename,[self.data,self.type])
-            else:
+            elif outtype=='ascii':
                 self.data.write(filename,overwrite=True,format='ascii')
+            else:
+                self.data.write(filename,overwrite=True,format='ascii')                
             return
         # Open the output file
         outtype = outtype.lower()
