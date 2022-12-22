@@ -4,6 +4,7 @@ import warnings
 from collections import OrderedDict
 from astropy.table import QTable,Table,Column,MaskedColumn
 import astropy.units as u
+from astropy.io import fits
 from dlnpyutils import utils as dln
 from . import utils
 
@@ -75,6 +76,13 @@ def toint(val,unit=None):
         else:
             return int(val)*unit            
 
+def wave_units(lenunit,air):
+    """ Define new wavelength units that includes air/vac information."""
+    if air:
+        return u.def_unit(lenunit.name+'_air',lenunit)
+    else:
+        return u.def_unit(lenunit.name+'_vacuum',lenunit)
+    
 def autoidentifytype(filename):
     """ Try to automatically figure out the linelist format type."""
 
@@ -163,7 +171,11 @@ def convertto(info,outtype):
     # specid in turbospectrum format
     # -- MOOG --
     if outtype=='moog':
-        # wave, energy levels, rad already okay
+        # energy levels, rad already okay
+        # wavelengths from vacuum to air, both Ang
+        if info['airwave']==False and info['lambda'].value>2000.0:
+            info['lambda'] = utils.vactoair(info['lambda']) * u.A
+            info['airwave'] = True            
         # specid conversions
         specid = str(info['id'])
         num,decimal = specid.split('.')
@@ -205,9 +217,10 @@ def convertto(info,outtype):
         info['id'] = newid
     # -- Kurucz --
     elif outtype=='kurucz':
-        # lambda from Ang to nm
+        # lambda from vacuum to air and Ang to nm
         if info['lambda'].unit != u.nm:
-            info['lambda'] = info['lambda'].to(u.nm)
+            info['lambda'] = utils.vactoair(info['lambda'].value)/10.0 * u.nm
+            info['airwave'] = True            
         #info['lambda'] /= 10
         # EP1 and EP2 from eV to cm-1
         if info.get('EP1') is not None and info.get('EP1').unit!=(1/u.cm):
@@ -239,7 +252,7 @@ def convertto(info,outtype):
             info['code'] = newid
     # -- ASPCAP --
     elif outtype=='aspcap':
-        # lambda from Ang to nm
+        # lambda from Ang to nm, both vacuum
         if info['lambda'].unit != u.nm:
             info['lambda'] = info['lambda'].to(u.nm)
         # EP1 and EP2 from eV to cm-1
@@ -266,9 +279,10 @@ def convertto(info,outtype):
                 info['id'] = num+'.0'
     # -- Synspec --
     elif outtype=='synspec':
-        # lambda from Ang to nm
+        # lambda from vacuum to air and Ang to nm
         if info['lambda'].unit != u.nm:
-            info['lambda'] = info['lambda'].to(u.nm)
+            info['lambda'] = utils.vactoair(info['lambda'].value)/10.0 * u.nm
+            info['airwave'] = True            
         # EP1 and EP2 from eV to cm-1
         if info.get('EP1') is not None and info.get('EP1').unit!=(1/u.cm):
             info['EP1'] = info['EP1'].value / 1.2389e-4 * (1/u.cm)
@@ -290,7 +304,11 @@ def convertto(info,outtype):
             info['id'] = newid
     # -- Turbospectrum --
     elif (outtype=='turbo' or outtype=='turbospectrum'):
-        # wave, energy levels and specid already okay
+        # energy levels already okay
+        # lambda from vacuum to air
+        if info['lambda'].unit != u.nm:
+            info['lambda'] = utils.vactoair(info['lambda'].value) * u.A
+            info['airwave'] = True
         # gamrad is 10^(Rad)-1, radiation damping constant
         if info.get('rad') is not None:
             info['rad'] = 10**info['rad']-1
@@ -313,9 +331,11 @@ def convertfrom(info,intype):
     # wavelength and excitation potentials have units now
     # convert wavelenght to Angstroms
     if info['lambda'].unit != u.A:
-        import pdb; pdb.set_trace()
         info['lambda'] = info['lambda'].to(u.A) # convert to A
         # convert to vacuum wavelengths
+        if info['airwave']==True and info['lambda']>2000:
+            info['lambda'] = utils.airtovac(info['lambda'].value) * u.A
+            info['airwave'] = False
     # convert excitation potentials to eV
     for ex in ['EP1','EP2','ep']:
         if info.get(ex) is not None and type(info.get(ex)) is u.Quantity and info.get(ex).unit!=u.eV:
@@ -487,10 +507,8 @@ def convertfrom(info,intype):
 def reader_moog(line,freeform=True):
     """ Parse a single MOOG linelist line and return in standard units."""
     # output in my "standard" units
-
-    # air or vacuum wavelengths??
     
-    # Wavelength in A
+    # Wavelength in A (air)
     # line designation
     # excitation potential in eV
     # gf or loggf
@@ -537,7 +555,7 @@ def reader_moog(line,freeform=True):
     info['loggf'] = loggf
     info['vdW'] = vdW
     info['dis'] = dis
-    #info['airwave'] = ??
+    info['airwave'] = True   # moog uses air
     info['type'] = 'moog'
     num,decimal = specid.split('.')
     if int(num)>99:
@@ -1000,8 +1018,6 @@ def reader_aspcap(line):
 
 def reader_synspec(line):
     """ Parse a single synspec linelist line and return information in standard units."""
-
-    # air or vacuum wavelengths??    
     
     #from synspec43.f function INILIN
     #C
@@ -1112,7 +1128,7 @@ def reader_synspec(line):
         info['rad'] = rad
         info['stark'] = stark
         info['vdW'] = vdW
-        #info['airwave'] = ???
+        info['airwave'] = True   # air wavelengths
         info['type'] = 'synspec'
         info['molec'] = False
         return info
@@ -1158,7 +1174,7 @@ def reader_synspec(line):
         info['rad'] = gamrad
         info['stark'] = stark
         info['vdW'] = vdW
-        #info['airwave'] = ???
+        info['airwave'] = True   # air wavelengths
         info['type'] = 'synspec'
         info['molec'] = True
         return info
@@ -1257,10 +1273,10 @@ def reader_turbo(line):
 
         info = OrderedDict()  # start dictionary        
         info['id'] = 'dumy'  # will be filled it by driver program using header line information
-        info['lambda'] = lam
+        info['lambda'] = lam           # wavelength in Ang
         info['ep'] = ep
         info['loggf'] = loggf
-        info['vdW'] = None  # adding for consistency with atomic format
+        info['vdW'] = None         # adding for consistency with atomic format
         info['gu'] = gu
         info['rad'] = gamrad
         info['stark'] = None
@@ -2097,7 +2113,13 @@ def list2table(info):
                     col = MaskedColumn(dd,name=names[i],dtype=types[i])                    
         tab.add_column(col)
         if unit is not None:
-            tab[names[i]] = tab[names[i]]*unit
+            # new wavelength unit
+            if names[i]=='lambda':
+                # air or vacuum wavelengths                
+                wunit = wave_units(unit,info[0]['airwave'])
+                tab[names[i]] = tab[names[i]]*wunit
+            else:
+                tab[names[i]] = tab[names[i]]*unit
     return tab
 
 class Reader(object):
@@ -2417,8 +2439,11 @@ class Linelist(object):
         out += self.data.__repr__()
         return out
 
-    def __getitem__(self,item):
-        return self.data[item]
+    def __getitem__(self,key):
+        return self.data[key]
+
+    def __setitem__(self,key,val):
+        self.data[key] = val
     
     def __len__(self):
         return len(self.data)
@@ -2427,16 +2452,21 @@ class Linelist(object):
     def read(cls,filename,intype=None,nmax=None):
         # If no intype given, then read as fits, ascii or pickle based
         # on the filename extension
-        base,ext = os.path.splitext(os.path.basename(filename))
-        
+        base,ext = os.path.splitext(os.path.basename(filename))        
         if intype is None:
-            if ext=='fits':
-                data = Table.read(filename)
+            if ext=='.fits':
+                data = QTable.read(filename)
                 head = fits.getheader(filename,0)
                 intype = head['type']
+                wunit = head['wunit']
                 new = Linelist(data,intype)
+                # Get the right wavelength air/vacuum custom units
+                lenunit,airvac = wunit.split('_')
+                airwave = (True if airvac=='air' else False)
+                wunits = wave_units(getattr(u,lenunit),airwave)
+                new.data['lambda'] = new.data['lambda'].value * wunits
                 return new
-            elif ext=='pkl':
+            elif ext=='.pkl':
                 data,intype = dln.unpickle(filename)
                 new = Linelist(data,intype)
                 return new                
@@ -2457,24 +2487,25 @@ class Linelist(object):
                     
     def write(self,filename,outtype=None):
         """ Write to a file."""
-        outtype = outtype.lower()
-        if outtype[0:5]=='turbo': outtype='turbo'
         # If no outtype given, then write as fits, ascii or pickle based
         # on the filename extension
         if outtype==None:
             base,ext = os.path.splitext(os.path.basename(filename))
-            if ext=='fits':
+            if ext=='.fits':
                 hdu = fits.HDUList()
                 hdu.append(fits.table_to_hdu(self.data))
                 hdu[0].header['type'] = self.type
+                hdu[0].header['wunit'] = self.data['lambda'][0].unit.name
                 hdu.writeto(filename,overwrite=True)
                 hdu.close()
-            elif ext=='pkl':
+            elif ext=='.pkl':
                 dln.pickle(filename,[self.data,self.type])
             else:
                 self.data.write(filename,overwrite=True,format='ascii')
             return
         # Open the output file
+        outtype = outtype.lower()
+        if outtype[0:5]=='turbo': outtype='turbo'        
         writer = Writer(filename,outtype)
         for i in range(len(self.data)):  # loop over rows
             # 1) use convertfrom() to convert to standard units
