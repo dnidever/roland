@@ -160,39 +160,55 @@ def autoidentifytype(filename):
     nametype = [f in filename.lower() for f in types]
 
     # Try to read some lines and see if it breaks
-    canread = np.zeros(6,bool)    
+    canread = np.zeros(6,bool)
+    formatokay = np.zeros(6,bool)
     if os.path.exists(filename):
+        lines = dln.readlines(filename,nreadline=20)
+        # use a detailed analysis of the data format to figure out ambiguous cases
+        # VALD is comma delimited and starts with '
+        line = lines[np.minimum(5,len(lines))]  # try to skip any header comment lines
+        arr = line.split(',')
+        narr = len(arr)
+        
         for i,f in enumerate(types):
             try:
                 data = Linelist.read(filename,f,nmax=20)
                 canread[i] = True
+                # check format
+                # MOOG has 5 whitespace separated columns
+                if f=='moog' and narr==6:
+                    formatokay[i] = True
+                # VALD is comma delimited and starts with '
+                if f=='vald' and line[0]=="'" and len(arr)>8:
+                    formatokay[i] = True
+                # ASPCAP lines are 186 characters long
+                if f=='aspcap' and len(line)==186:
+                    formatokay[i] = True
+                #-synspec: nothing easy to use for now
+                if f=='synspec':
+                    formatokay[i] = True
+                #-Kurucz: also very specific format
+                if f=='kurucz':
+                    formatokay[i] = True
+                #-Turbospectrum: the header lines
+                if f=='turbo':
+                    hastick = [True if l.find("'")>-1 else False for l in lines]
+                    nticks = np.sum(hastick)
+                    if nticks>=2:
+                        formatokay[k] = True
             except:
                 pass
-
+            
+    # A single name or read type works
     if (np.sum(nametype)==1 or np.sum(canread)==1) and np.sum(canread)>0:
         if np.sum(canread)==1:
             return np.array(types)[canread][0]
         else:
             return np.array(types)[nametype][0]
-        
-    # Use format of file
-    #-VALD:  comma-delimited
-    #-MOOG: only ~5 lines
-    #-ASPCAP: very specific format
-    #-Turbospectrum: the header lines
-    #-synspec: 
-    #-Kurucz: also very specific format
-    lines = dln.readlines(filename,nreadline=20)
-    # use a detailed analysis of the data format to figure out ambiguous cases
 
-    # VALD is comma delimited and starts with '
-    line = lines[np.minimum(5,len(lines))]  # try to skip any header comment lines
-    arr = line.split(',')
-    if line[0]=="'" and len(arr)>8:
-        return 'vald'
-    # ASPCAP lines are 186 characters long
-    if len(lines[0])==186:
-        return 'aspcap'
+    # Multiple read types but only one format type works
+    if np.sum(canread & formatokay):
+        return np.array(types)[canread & formatokay][0]
     
     raise Exception('Cannot autoidentify file.  Available formats are: moog, vald, kurucz, aspcap, synspec and turbospectrum')
 
@@ -213,11 +229,13 @@ def turbospecid(specid):
        Turbospectrum ID, e.g.  '3.000' or '0608.012016'
     name : str
        Turbospectrum name, e.g. 'LI I' or '0608'
+    ion : int
+       The ion/charge for the atoms and 1 for the molecules.
 
     Example
     -------
 
-    newid,newname = turbospecid(specid)
+    newid,newname,ion = turbospecid(specid)
 
     """
     # atomic list
@@ -247,9 +265,11 @@ def turbospecid(specid):
         #'Sneden web '
         anum1 = int(fspecid/100)
         anum2 = anum-100*anum1
-        newid = '{0:04d}.{1:03d}{2:03d}'.format(anum,anum1,int(decimal))
+        #newid = '{0:04d}.{1:03d}{2:03d}'.format(anum,anum1,int(decimal))
+        newid = '{0:04d}.{1:s}'.format(anum,decimal)
         name = num2name[anum].upper()
-    return newid,name
+        ion = 1   # output ion value is always 1 in the Turbospectrum header line for molecules
+    return newid,name,ion
     
     
 def convertto(info,outtype):
@@ -287,7 +307,7 @@ def convertto(info,outtype):
         # energy levels, rad already okay
         # wavelengths from vacuum to air, both Ang
         if info['airwave']==False and info['lambda'].value>2000.0:
-            info['lambda'] = utils.vactoair(info['lambda']) * u.A
+            info['lambda'] = utils.vactoair(info['lambda'].value) * u.AA
             info['airwave'] = True            
         # specid conversions
         specid = str(info['id'])
@@ -420,7 +440,7 @@ def convertto(info,outtype):
         # energy levels already okay
         # lambda from vacuum to air
         if info['lambda'].unit != u.nm:
-            info['lambda'] = utils.vactoair(info['lambda'].value) * u.A
+            info['lambda'] = utils.vactoair(info['lambda'].value) * u.AA
             info['airwave'] = True
         # gamrad is 10^(Rad)-1, radiation damping constant
         if info.get('rad') is not None:
@@ -428,9 +448,11 @@ def convertto(info,outtype):
         # atomic specid needs to be converted
         # molecular specid already okay
         # h20 is 010108.000000000, each atom gets 3 digits in decimal
-        newid,newname = turbospecid(info['specid'])
+        specid = info['id']
+        newid,newname,ion = turbospecid(info['id'])
         info['id'] = newid
         info['name'] = newname
+        info['ion'] = ion
         
     return info
     
@@ -467,11 +489,11 @@ def convertfrom(info,intype):
 
     # wavelength and excitation potentials have units now
     # convert wavelenght to Angstroms
-    if info['lambda'].unit != u.A:
-        info['lambda'] = info['lambda'].to(u.A) # convert to A
+    if info['lambda'].unit != u.AA:
+        info['lambda'] = info['lambda'].to(u.AA) # convert to A
         # convert to vacuum wavelengths
-        if info['airwave']==True and info['lambda']>2000:
-            info['lambda'] = utils.airtovac(info['lambda'].value) * u.A
+        if info['airwave']==True and info['lambda'].value>2000:
+            info['lambda'] = utils.airtovac(info['lambda'].value) * u.AA
             info['airwave'] = False
     # convert excitation potentials to eV
     for ex in ['EP1','EP2','ep']:
@@ -683,7 +705,7 @@ def reader_moog(line,freeform=True):
     # 6300.265    607.0    1.28    5.78E-3            7.65    12R11410,5
     # 6300.310      8.0    0.00    1.78E-10
     if freeform==False:
-        lam = tofloat(line[0:10],u.A)      # wavelength in Ang
+        lam = tofloat(line[0:10],u.AA)      # wavelength in Ang
         specid = line[10:20].strip()
         ep = tofloat(line[20:30],u.eV)     # excitation potential in eV
         loggf = tofloat(line[30:40])
@@ -698,7 +720,7 @@ def reader_moog(line,freeform=True):
     # 6300.310  8.0    0.00   1.78E-10  0. 0.  0.
     else:
         arr = line.split()
-        lam = tofloat(arr[0],u.A)       # wavelength in Ang
+        lam = tofloat(arr[0],u.AA)       # wavelength in Ang
         specid = arr[1].strip()
         ep = tofloat(arr[2],u.eV)       # excitation potential in eV
         loggf = tofloat(arr[3])
@@ -792,10 +814,8 @@ def reader_vald(line):
     # error         An uncertainty estimate for this linedata
     
     arr = line.split(',')       # comma delimited
-    #atom,ion = arr[0].replace("'","").split()  # whitespace delimited
-    #specid = str(name2num[atom])+'.'+('%02d' % int(ion))
     specid = arr[0].replace("'","").strip()
-    lam = tofloat(arr[1],u.A)       # Wavelength in Ang
+    lam = tofloat(arr[1],u.AA)       # Wavelength in Ang
     ep = tofloat(arr[2],u.eV)       # EP, excitation potential in eV
     vmicro = tofloat(arr[3])        # Vmicro
     loggf = tofloat(arr[4])         # loggf
@@ -806,7 +826,7 @@ def reader_vald(line):
     depth = arr[9]                  # depth
 
     # Long format
-    if len(arr)>10:
+    if len(arr)>11:
         lande_lower = tofloat(arr[10])
         lande_upper = tofloat(arr[11])
         J1 = tofloat(arr[12])
@@ -827,7 +847,7 @@ def reader_vald(line):
     info['vmicro'] = vmicro
     info['lande'] = lande
     info['depth'] = depth
-    if len(arr)>10:
+    if len(arr)>11:
         info['lande_lower'] = lande_lower
         info['lande_upper'] = lande_upper
         info['J1'] = J1
@@ -1517,13 +1537,24 @@ def reader_turbo(line):
     #        endif
 
     # There are two types of atomic line formats, with and without stark broadening
+
+    # The atomic and molecular lines have slightly different formats
+    # atomic line: first tick mark ' is at character 61
+    # molecular line: first tick mark ' is at character 57
+    tickpos = line.find("'")
+    # some molecular linelists only have the first six columns and no ticks at all
     
+    if tickpos==57 or (tickpos==-1 and len(line)<55):
+        # probably only first six columns
+        if tickpos==-1:
+            fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F5.2,1X,F6.1,1X,E9.2,1X,A6,3X,A1,3X,A1,1X,A4,1X,A4)'
+            out = utils.fread(line,fmt)
+        # normal molecular format
+        else:
+            fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F5.2,1X,F6.1,1X,E9.2,1X,F6.3,3X,A1,3X,A1,1X,F4.1,1X,F4.1)'
+            out = utils.fread(line,fmt)    
     
-    if len(line)<75:
-        fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F5.2,1X,F6.1,1X,E9.2,1X,F6.3,3X,A1,3X,A1,1X,F4.1,1X,F4.1)'
-        out = utils.fread(line,fmt)    
-    
-        lam = tofloat(out[0],u.A)      # wavelength in Ang
+        lam = tofloat(out[0],u.AA)      # wavelength in Ang
         ep = tofloat(out[1],u.eV)      # excitation potential in eV, of the lower level
         loggf = out[2]
         vdW = out[3]      # 0.0
@@ -1582,18 +1613,19 @@ def reader_turbo(line):
     #        endif
     
     # Some formats are missing the 7th column (gamstark)
-    lo = line.find("'")
-    if lo<60:
+    if tickpos<60:
         # first ' should be at character 53
+        #  7626.509  0.086  -4.789      0.00   20.0  0.00E+00 'x' 'x'  0.0  1.0 ' 2  0 SR32  8.5 FeH     FX'
         fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,'
         fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'        
     else:
         # first ' should be at character 61
-        fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,1X,F7.3,'
+        # 15062.414 23.593  -2.804      0.00    1.0  0.00e+00   0.00  'x' 'x' 0.0 1.0 'HE  I                         '
+        fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,1X,F6.2,'
         fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'
     out = utils.fread(line,fmt)    
     
-    lam = tofloat(out[0],u.A)      # wavelength in Ang
+    lam = tofloat(out[0],u.AA)      # wavelength in Ang
     ep = tofloat(out[1],u.eV)      # excitation potential in eV, of lower level
     loggf = out[2]
     vdW = out[3]
@@ -1677,14 +1709,16 @@ def writer_moog(info,freeform=True):
     
     if ep is None:
         # Calculate excaitation potential from EP1 and EP2
-        if (float(EP1) < 0):
-            ep = -float(EP1)
+        if (float(EP1.value) < 0):
+            ep = -float(EP1.value)
         else:
-            ep = float(EP1)
-        if (float(EP2) < 0):
-            EP2 = -float(EP2)
-        if (float(EP2) < float(ep)):
+            ep = float(EP1.value)
+        if (float(EP2.value) < 0):
+            EP2 = -float(EP2.value)
+        if (float(EP2.value) < float(ep)):
             ep = float(EP2)
+    else:
+        ep = ep.value
     vdW = info.get('vdW')
     if vdW is None:
         vdW = 0.0
@@ -1706,7 +1740,7 @@ def writer_moog(info,freeform=True):
         fmt = "{0:10.3f}{1:>12s}{2:10.3f}{3:10.3f}{4:10.3f}{5:10.3f}\n"
     else:
         fmt = "{0:10.3f} {1:>12s} {2:10.3f} {3:10.3f} {4:10.3f} {5:10.3f}\n"
-    line = fmt.format(lam.value,specid,ep.value,loggf,vdW,dis)
+    line = fmt.format(lam.value,specid,ep,loggf,vdW,dis)
 
     return line
 
@@ -1755,14 +1789,16 @@ def writer_vald(info):
 
     # Calculate excitation potential from EP1 and EP2    
     if ep is None:
-        if (float(EP1) < 0):
-            ep = -float(EP1)
+        if (float(EP1.value) < 0):
+            ep = -float(EP1.value)
         else:
-            ep = float(EP1)
-        if (float(EP2) < 0):
-            EP2 = -float(EP2)
-        if (float(EP2) < float(ep)):
-            ep = float(EP2)
+            ep = float(EP1.value)
+        if (float(EP2.value) < 0):
+            EP2 = -float(EP2.value)
+        if (float(EP2.value) < float(ep)):
+            ep = float(EP2.value)
+    else:
+        ep = ep.value
     vmicro = info.get('vmicro')
     if vmicro is None:
         vmicro = 0.0
@@ -1787,7 +1823,7 @@ def writer_vald(info):
     # Spec Ion       WL_vac(A)  Excit(eV) Vmic log gf* Rad.   Stark   Waals   factor  depth  Reference
     fmt = "'{0:s}', {1:17.4f}, {2:8.4f}, {3:.1f}, {4:.3f}, {5:.3f}, {6:.3f}, {7:.3f},"
     fmt += "{8:.3f}, {9:.3f}, '               '\n"
-    line = fmt.format(specid,lam.value,ep.value,vmicro,loggf,rad,stark,vdW,lande,depth)
+    line = fmt.format(specid,lam.value,ep,vmicro,loggf,rad,stark,vdW,lande,depth)
     
     return line
 
@@ -2095,7 +2131,7 @@ def writer_aspcap(info):
     fmt += '{11:12.3f}{12:5.1f}{13:11s}{14:6s}{15:6s}{16:6s} {17:2s}{18:2s}{19:3s}{20:6s}'
     fmt += '{21:3s}{22:6s}{23:5s}{24:5s}{25:1s}{26:1s}{27:1s}{28:1s}{29:1s}{30:1s}'
     fmt += '{31:5s}{32:5s}{33:3s}{34:6s}\n'
-    if lam>10000.0:
+    if lam.value>10000.0:
         fmt = '{0:9.3f}'+fmt[8:]
     line = fmt.format(lam.value,orggf,newgf,e_newgf,r_newgf,astgf,r_astgf,specid,EP1.value,J1,label1,EP2.value,J2,
                       label2,rad,stark,vdW,unlte,lnlte,iso,hyp,iso2,isofrac,hE1,hE2,F0,F1,
@@ -2125,7 +2161,7 @@ def writer_synspec(info):
     Example
     -------
 
-    line = writer_turbo(info)
+    line = writer_synspec(info)
 
     """
 
@@ -2349,9 +2385,10 @@ def writer_turbo(info):
     
     lam = info.get('lambda')    # in Ang
     specid = info.get('id')
+    name = info.get('name')
     loggf = info.get('loggf')
-    if lam is None or id is None or loggf is None:
-        raise ValueError('Need lambda, id and loggf for Turbospectrum format')
+    if lam is None or specid is None or name is None or loggf is None:
+        raise ValueError('Need lambda, id, name and loggf for Turbospectrum format')
     ep = info.get('ep')
     gu = info.get('gu')
     if ep is None or gu is None:
@@ -2362,6 +2399,8 @@ def writer_turbo(info):
         J2 = info.get('J2')
         if EP1 is None or J1 is None or EP2 is None or J2 is None:
             raise ValueError('Need ep and gu OR EP1,J1,EP2,J2')
+        EP1 = EP1.value   # need scalars
+        EP2 = EP2.value
         # Calculate excitation potential from EP1 and EP2
         if gu is None: gu = 99
         if (float(EP1) < 0):
@@ -2372,7 +2411,9 @@ def writer_turbo(info):
             EP2 = -float(EP2)
         if (float(EP2) < float(ep)):
             ep = float(EP2); gu = (float(J1) * 2.0) + 1  
-    
+    else:
+        ep = ep.value
+        
     # Check that we have the essentials
     if lam is None or loggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
         raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
@@ -2400,14 +2441,14 @@ def writer_turbo(info):
         # molecular lines only has the first 6 columns
         # 15000.983  2.490  -5.316  0.00   48.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
         # 15000.990  2.802  -3.735  0.00  194.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
-        fmt = "{0:10.3f} {1:6.2f} {2:7.3f}  0.00 {3:6.1f}  1.00e+00  0.000  'x' 'x'  0.0  1.0\n"
-        line = fmt.format(lam.value,ep.value,loggf,gu)
+        fmt = "{0:10.3f} {1:6.3f} {2:7.3f}  0.00 {3:6.1f}  1.00e+00  0.000  'x' 'x'  0.0  1.0\n"
+        line = fmt.format(lam.value,ep,loggf,gu)
     # atomic lines
     else:
-        fmt = '{0:10.3f} {1:6.2f} {2:7.3f} {3:9.2f} {4:6.1f} {5:9.2e} {6:7.3f}  '
+        fmt = '{0:10.3f} {1:6.3f} {2:7.3f} {3:9.2f} {4:6.1f} {5:9.2e} {6:6.2f}  '
         fmt += "'x' 'x' 0.0 1.0 '{7:6s} {8:11s} {9:11s}'\n"
-        line = fmt.format(lam.value,ep.value,loggf,vdW,gu,rad,stark,specid,label1,label2)
-    
+        line = fmt.format(lam.value,ep,loggf,vdW,gu,rad,stark,name,label1,label2)
+        
     return line   
 
 
@@ -2446,7 +2487,7 @@ def linelist_info(filename,intype):
                 count += 1
                 continue
             info1 = reader(line)
-            keep = (count+1,info1.get('id'),info1.get('lambda'),count,charcount,len(line))
+            keep = (count+1,info1.get('id'),info1.get('lambda').value,count,charcount,len(line))
             charcount = infile.tell()
             info.append(keep)
             count += 1
@@ -2504,7 +2545,7 @@ def list2table(info):
             dd = data[i]
             unit = None
             if types[i] is u.Quantity:
-                types[i] = type(data[i][0].value)
+                types[i] = type(val.value)
                 unit = val.unit
                 dd = [item.value if item is not None else None for item in data[i]]
             if types[i] is str:
@@ -2671,6 +2712,10 @@ class Reader(object):
             self.hlines = hlines
             self.specid = hlines[0].split("'")[1].strip()
             self.specname = hlines[1].split("'")[1].strip()
+            if int(float(self.specid))<100:
+                self.ion = hlines[0].split("'")[2].split()[0]
+            else:
+                self.ion = 1
             self.snum = int(hlines[0].split("'")[2].split()[1])  # number of lines for this species
             # The last "line" will be a normal line and parsed below
         # Parse the line
@@ -2679,6 +2724,7 @@ class Reader(object):
         if self.turbo:
             info['id'] = self.specid
             info['name'] = self.specname
+            info['ion'] = self.ion
         if self.verbose: print(info)
         return info
 
@@ -2709,6 +2755,8 @@ class Writer(object):
         # Open the file
         self.file = open(filename,'w')
         self.specid = None
+        self.specname = None
+        self.specion = None
         self.wave = []
         self.allinfo = []
         self.scount = 0        
@@ -2740,7 +2788,7 @@ class Writer(object):
         if self.turbo:
             # This will "cache" the species lines until we reach the end
             #  otherwise we don't know what to put in the header lines
-            if self.scount>0 and (info is None or info=='' or info['id']!= self.specid):
+            if self.scount>0 and (info is None or info=='' or info['name']!= self.specname):
                 # Write out the species lines
                 # Make the header lines
                 # atomic list
@@ -2749,9 +2797,8 @@ class Writer(object):
                 # molecular list
                 #'0608.012016 '            1      7478
                 #'12C16O Li2015'
-                newid,newname = turbospecid(self.specid)
-                self.file.write("'{0:s}  ' {1:5d} {2:10d}\n".format(newid,1,self.scount))
-                self.file.write("'{:s}  '\n".format(newname))
+                self.file.write("'{0:s}  ' {1:5d} {2:10d}\n".format(self.specid,self.specion,self.scount))
+                self.file.write("'{:s}  '\n".format(self.specname))
                 # Loop over the lines and write them out
                 # Sort info by wavelength
                 allinfo = [x for _, x in sorted(zip(self.wave,self.allinfo), key=lambda pair: pair[0])]
@@ -2763,12 +2810,16 @@ class Writer(object):
                     return
                 # Save the new line information
                 self.specid = info['id']
+                self.specname = info['name']
+                self.specion = info['ion']
                 self.allinfo = [info]
                 self.wave.append(info['lambda'])
                 self.scount = 1
             # Same type of line as the last one
             else:
                 self.specid = info['id']
+                self.specname = info['name']
+                self.specion = info['ion']                
                 self.allinfo.append(info)
                 self.wave.append(info['lambda'])            
                 self.scount += 1
@@ -2821,6 +2872,7 @@ class Converter(object):
     """
 
     def __init__(self,intype=None,outtype=None,infile=None,outfile=None):
+        formats = ['moog','vald','kurucz','aspcap','synspec','turbo','turbospectrum']
         if infile is not None and intype is None:
             intype = autoidentifytype(infile)
             self.intype = intype
@@ -2838,7 +2890,12 @@ class Converter(object):
             self.outtype = 'turbo'
             self.outturbo = True            
         else:
-            self.outturbo = False                
+            self.outturbo = False
+        # Check that we understand the formats
+        if self.intype not in formats:
+            raise ValueError('Format '+self.intype+' NOT supported. Only '+','.join(formats))
+        if self.outtype not in formats:
+            raise ValueError('Format '+self.outtype+' NOT supported. Only '+','.join(formats))        
         # Check that we can do this conversion
         # Cannot do MOOG -> Kurucz/Synspec/Turbospectrum
         #  Kurucz needs lambda,loggf,specid,EP1,J1,EP2,J2
@@ -2856,8 +2913,8 @@ class Converter(object):
             raise Exception('Cannot convert Synspec to Kurucz/ASPCAP/Turbospectrum')
         # Cannot do Turbospectrum -> Synspec
         #  Synspec needs lambda,loggf,specid,EP1,J1,EP2,J2
-        if self.inturbo and self.outtype=='synspec':
-            raise Exception('Cannot convert Turbospectrum to Synspec')
+        if self.inturbo and self.outtype in ['kurucz','aspcap','synspec']:
+            raise Exception('Cannot convert Turbospectrum to Kurucz/ASPCAP/Synspec')
 
         # If infile and outfile were given, then convert directly
         if infile is not None and outfile is not None:

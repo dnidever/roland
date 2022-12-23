@@ -141,10 +141,12 @@ def airtovac(wave):
       Iterate for better precision W.L./D. Schlegel  Mar 2011
     """
 
+    nwave = np.array(wave).size
     wave_air = np.atleast_1d(wave).copy()  # makes sure it's an array
     wave_vac = np.atleast_1d(wave).copy()  # initialize
     
-    g,ng = utils.where(wave_vac >= 2000)     # Only modify above 2000 A
+    g, = np.where(wave_vac >= 2000)     # Only modify above 2000 A
+    ng = len(g)
     
     if ng>0:
         for iter in range(2):
@@ -155,6 +157,9 @@ def airtovac(wave):
             
             wave_vac[g] = wave_air[g]*fact              # Convert Wavelength
 
+    if nwave==1 and type(wave) is not np.array:
+        wave_vac = wave_vac[0]
+        
     return wave_vac
 
 
@@ -189,10 +194,11 @@ def vactoair(wave_vac):
            Added optional output vector, W Landsman Mar 2011
     """
 
-  
+    nwave = np.array(wave_vac).size
     wave_vac = np.atleast_1d(wave_vac).copy()  # makes sure it's an array
     wave_air = np.atleast_1d(wave_vac).copy()  # initialize
-    g,ng = utils.where(wave_air >= 2000)     # Only modify above 2000 A
+    g, = np.where(wave_air >= 2000)     # Only modify above 2000 A
+    ng = len(g)
     
     if ng>0:
         sigma2 = (1e4/wave_vac[g] )**2   # Convert to wavenumber squared
@@ -203,4 +209,7 @@ def vactoair(wave_vac):
         # Convert wavelengths
         wave_air[g] = wave_vac[g]/fact
 
+    if nwave==1 and type(wave_vac) is not np.array:
+        wave_air = wave_air[0]
+        
     return wave_air
