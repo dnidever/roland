@@ -851,41 +851,37 @@ class MARCSAtmosphere(Atmosphere):
 
         data = self.data
         header = self.header
-
-        # 1.75437086E-02   1995.0 1.754E-02 1.300E+04 7.601E-06 1.708E-04 2.000E+05 0.000E+00 0.000E+00 1.177E+06
-        # 2.26928500E-02   1995.0 2.269E-02 1.644E+04 9.674E-06 1.805E-04 2.000E+05 0.000E+00 0.000E+00 9.849E+05
-        # 2.81685925E-02   1995.0 2.816E-02 1.999E+04 1.199E-05 1.919E-04 2.000E+05 0.000E+00 0.000E+00 8.548E+05
-        # 3.41101002E-02   1995.0 3.410E-02 2.374E+04 1.463E-05 2.043E-04 2.000E+05 0.000E+00 0.000E+00 7.602E+05
         ndata,ncols = data.shape
+        
+        # First set of columns
+        # Model structure
+        #  k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb
+        #   1 -5.00 -4.3387 -2.222E+11  3935.2  9.4190E-05  8.3731E-01  1.5817E+00  0.0000E+00
+        #fmt = '(I3,F6.2,F8.4,F11.3,F8.1,F12.4,F12.4,F12.4,F12.4)'
         datalines = []
+        datalines.append('  k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb')
         for i in range(ndata):
-            # fmt9 = '(F15.8, F9.1, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3)'  # ATLAS9
-            # fmt12 = '(F15.8, F9.1, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3)'          # ATLAS12
-
-            # Output 9 columns (ATLAS12 format) unless we have 10 columns
-            if ncols==8:
-                newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E 0.000E+00\n' % tuple(data[i,:])
-            elif ncols==9:
-                newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E\n' % tuple(data[i,:])                
-            elif ncols==10:
-                newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E\n' % tuple(data[i,:])
-            else:
-                raise ValueError('Only 8 or 10 columns supported')
+            fmt = '{0:3d}{1:6.2f}{2:8.4f}{3:11.3e}{4:8.1f}{5:12.4e}{6:12.4e}{7:12.4e}{8:12.4e}'
+            newline = fmt.format(i+1,data[i,0],data[i,1],data[i,2],data[i,3],data[i,4],data[i,5],data[i,6],data[i,7])
             datalines.append(newline)
-        lines = header + datalines
 
-        # Add the two tail lines
-        # In the last row, PRADK is the radiation pressure at the surface.
-        lines.append('PRADK 1.9978E-01\n')      # dummy value for now
-        lines.append('BEGIN                    ITERATION  15 COMPLETED\n')
+        # Second set of columns
+        # k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX
+        #  1 -5.00  1.0979E-04  3.2425E-12 1.267  0.000E+00 0.00000  2.841917E-01
+        #fmt = '(I3,F6.2,F12.4,F12.4,F6.3,F11.3,F8.4,F14.4)'            
+        datalines.append(' k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX')
+        for i in range(ndata):
+            fmt = '{0:3d}{1:6.2f}{2:12.4e}{3:12.4e}{4:6.3f}{5:11.3e}{6:8.4f}{7:14.4e}'
+            newline = fmt.format(i+1,data[i,0],data[i,8],data[i,9],data[i,10],data[i,11],data[i,12])
+            datalines.append(newline)
+            
+        lines = header + datalines
         
         # write text file
         if os.path.exists(mfile): os.remove(mfile)
         f = open(mfile, 'w')
         f.writelines(lines)
         f.close()
-
-
 
 
 
