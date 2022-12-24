@@ -17,13 +17,11 @@ import gzip
 import numpy as np
 import warnings
 from glob import glob
-from scipy.interpolate import interp1d
+from astropy.io import fits
+import astropy.units as u
+from astropy.table import Table,QTable
 from dlnpyutils import (utils as dln, bindata, astro)
-from scipy.integrate import trapz
 import copy
-import logging
-import contextlib, io, sys
-import time
 import dill as pickle
 from . import utils
 try:
@@ -456,7 +454,13 @@ def read_marcs_model(modelfile):
         
     # Combine the two sets of columns
     data = np.hstack((data1,data2))
-        
+
+    # Read the footer
+    footer = []
+    while (line.strip()!=''):
+        line = f.readline()
+        footer.append(line)
+    
     # Get the header
     header = []
     with open(modelfile,'r') as f:
@@ -465,7 +469,7 @@ def read_marcs_model(modelfile):
             line = f.readline()
             header.append(line)
             
-    return data, header, labels, abu
+    return data, header, labels, abu, footer
 
 
 class Atmosphere(object):
@@ -491,6 +495,8 @@ class Atmosphere(object):
         for i in range(len(self.params)):
             out += '{0:s}={1:.2f}, '.format(self.labels[i],self.params[i])
         out += 'ndepths={})\n'.format(self.ndepths)
+        if hasattr(self,'tab'):
+            out += self.tab.__repr__()
         return out
 
     def __len__(self):
@@ -535,9 +541,9 @@ class Atmosphere(object):
             labels = ['teff','logg','feh','vmicro']
             return KuruczAtmosphere(data,header,params,labels,abu)
         elif atmostype == 'marcs':
-            data,header,params,abu = read_marcs_model(mfile)
+            data,header,params,abu,footer = read_marcs_model(mfile)
             labels = ['teff','logg','feh','alpha','vmicro']            
-            return MARCSAtmosphere(data,header,params,labels,abu)
+            return MARCSAtmosphere(data,header,params,labels,abu,footer)
         elif atmostype == 'phoenix':
             data,header,params,abu = read_phoenix_model(mfile)
             labels = ['teff','logg','feh','vmicro']            
@@ -562,17 +568,17 @@ class KuruczAtmosphere(Atmosphere):
     # The next 64 layers in this atmosphere model contain data needed by
     # SPECTRUM for calculating the synthetic spectrum. The first layer
     # represents the surface.
-    # -The first column is the mass depth.
-    # -The second column is the temperature, in kelvins, of the layer,
-    # -the third the gas pressure,
-    # -the fourth the electron density,
-    # -the fifth the Rosseland mean absorption coefficient,
-    # -the sixth the radiation pressure
-    # -the seventh the microturbulent velocity in meters/second.
+    # -The first column is the mass depth [g/cm2]
+    # -The second column is the temperature, [K], of the layer,
+    # -the third the gas pressure,  [dyne/cm2]
+    # -the fourth the electron number density [1/cm3]
+    # -the fifth the Rosseland mean absorption coefficient (kappa Ross) [cm2/g]
+    # -the sixth the radiative acceleration [cm/s2]
+    # -the seventh the microturbulent velocity in [cm/s]
     # The newer Kurucz/Castelli models have three additional columns which give
-    # -the amount of flux transported by convection, (FLXCNV)
-    # -the convective velocity (VCONV)
-    # -the sound velocity (VELSND)
+    # -the amount of flux transported by convection, (FLXCNV) [ergs/s/cm2]
+    # -the convective velocity (VCONV) [cm/s]
+    # -the sound velocity (VELSND)  [cm/s]
 
     # From Castelli & Kurucz (1994), Appendix A
     # Mass depth variable RHOX=Integral_0^x rho(x) dx, the temperature T, the
@@ -590,8 +596,21 @@ class KuruczAtmosphere(Atmosphere):
         super().__init__(data,header,params,labels,abu)
         self.scale = scale        
         self.mtype = 'kurucz'
-        self.columns = ['mass','temperature','pressure','edensity',
-                        'abross','radacc','microvel','fluxconv']
+        self.columns = ['dmass','temperature','pressure','edensity',
+                        'kappaross','radacc','microvel','fluxconv','velconvec','velsound']
+        self.units = [u.g/u.cm**2,u.K,u.dyne/u.cm**2,1/u.cm**3,u.cm**2/u.g,
+                      u.cm/u.s**2,u.cm/u.s,u.erg/u.s/u.cm**2,u.cm/u.s,u.cm/u.s]
+        if self.ncols==10:
+            self.units = self.units[0:10]
+        # Convert table to QTable with units
+        tab = QTable()
+        for i in range(self.ncols):
+            if self.units[i] is not None:
+                tab[self.columns[i]] = data[:,i]*self.units[i]
+            else:
+                tab[self.columns[i]] = data[:,i]
+        self.tab = tab
+        # All attributes to be able to access like a dictionary
         self._attributes = ['ncols','ndepths','param','labels','abu','scale','tauross']
         self._attributes += self.columns
         self._attributes += self.labels
@@ -728,14 +747,25 @@ class KuruczAtmosphere(Atmosphere):
 class MARCSAtmosphere(Atmosphere):
     """ Class for MARCS model atmosphere."""
     
-    def __init__(self,data,header,params=None,labels=None,abu=None):
+    def __init__(self,data,header,params=None,labels=None,abu=None,footer=None):
         """ Initialize Atmosphere object. """
         super().__init__(data,header,params,labels,abu)
         self.mtype = 'marcs'
+        self.footer = footer
         self.columns = ['tauross','tau5000','depth','temperature','epressure','gaspressure',
                         'radpressure','turbpressure','kappaross','density','mnmolecweight',
                         'velconv','frconvflux','dmass']
-        # maybe add units list as well
+        self.units = [None,None,u.cm,u.K,u.dyne/u.cm**2,u.dyne/u.cm**2,u.dyne/u.cm**2,u.dyne/u.cm**2,
+                      u.cm**2/u.g,u.g/u.cm**3,u.u,u.cm/u.s,None,u.g/u.cm**2]
+        # Convert table to QTable with units
+        tab = QTable()
+        for i in range(self.ncols):
+            if self.units[i] is not None:
+                tab[self.columns[i]] = data[:,i]*self.units[i]
+            else:
+                tab[self.columns[i]] = data[:,i]
+        self.tab = tab
+        # All attributes to be able to access like a dictionary        
         self._attributes = ['ncols','ndepths','param','labels','abu']
         self._attributes += self.columns
         self._attributes += self.labels
@@ -839,6 +869,8 @@ class MARCSAtmosphere(Atmosphere):
     def dmass(self):
         """ Return column mass above this shell [g/cm2]."""
         return self.data[:,13]  
+
+    # ADD UNITS
     
     #@classmethod
     #def read(cls,mfile):
@@ -859,9 +891,9 @@ class MARCSAtmosphere(Atmosphere):
         #   1 -5.00 -4.3387 -2.222E+11  3935.2  9.4190E-05  8.3731E-01  1.5817E+00  0.0000E+00
         #fmt = '(I3,F6.2,F8.4,F11.3,F8.1,F12.4,F12.4,F12.4,F12.4)'
         datalines = []
-        datalines.append('  k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb')
+        datalines.append(' k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb\n')
         for i in range(ndata):
-            fmt = '{0:3d}{1:6.2f}{2:8.4f}{3:11.3e}{4:8.1f}{5:12.4e}{6:12.4e}{7:12.4e}{8:12.4e}'
+            fmt = '{0:3d}{1:6.2f}{2:8.4f}{3:11.3E}{4:8.1f}{5:12.4E}{6:12.4E}{7:12.4E}{8:12.4E}\n'
             newline = fmt.format(i+1,data[i,0],data[i,1],data[i,2],data[i,3],data[i,4],data[i,5],data[i,6],data[i,7])
             datalines.append(newline)
 
@@ -869,13 +901,17 @@ class MARCSAtmosphere(Atmosphere):
         # k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX
         #  1 -5.00  1.0979E-04  3.2425E-12 1.267  0.000E+00 0.00000  2.841917E-01
         #fmt = '(I3,F6.2,F12.4,F12.4,F6.3,F11.3,F8.4,F14.4)'            
-        datalines.append(' k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX')
+        datalines.append(' k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX\n')
         for i in range(ndata):
-            fmt = '{0:3d}{1:6.2f}{2:12.4e}{3:12.4e}{4:6.3f}{5:11.3e}{6:8.4f}{7:14.4e}'
-            newline = fmt.format(i+1,data[i,0],data[i,8],data[i,9],data[i,10],data[i,11],data[i,12])
+            fmt = '{0:3d}{1:6.2f}{2:12.4E}{3:12.4E}{4:6.3f}{5:11.3E}{6:8.5f}{7:14.6E}\n'
+            newline = fmt.format(i+1,data[i,0],data[i,8],data[i,9],data[i,10],data[i,11],data[i,12],data[i,13])
             datalines.append(newline)
             
         lines = header + datalines
+
+        # Add footer
+        if len(self.footer)>0:
+            lines += self.footer
         
         # write text file
         if os.path.exists(mfile): os.remove(mfile)
