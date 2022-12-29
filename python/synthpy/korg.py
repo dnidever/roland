@@ -130,8 +130,6 @@ def synthesize(teff,logg,mh=0.0,am=0.0,cm=0.0,nm=0.0,vmicro=2.0,elems=None,
         spherical= True
     else:
         spherical = False
-
-    t0 = time.time()
         
     # Load the linelist and model atmosphere
     #  read_linelist() can take an isotropic_abundances argument
@@ -141,8 +139,6 @@ def synthesize(teff,logg,mh=0.0,am=0.0,cm=0.0,nm=0.0,vmicro=2.0,elems=None,
     # Run Korg
     spectrum = Korg.synthesize(atm, lines, abundances, wrange[0], wrange[1], dw, vmic=vmicro)
     continuum = Korg.synthesize(atm, [], abundances, wrange[0], wrange[1], dw, vmic=vmicro, hydrogen_lines=False)
-
-    print(time.time()-t0)
     
     flux = spectrum.flux
     cont = continuum.flux
