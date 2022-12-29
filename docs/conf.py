@@ -63,7 +63,7 @@ exclude_patterns.append('_templates')
 # This is added to the end of RST files - a good place to put substitutions to
 # be used globally.
 rst_epilog += """
-.. |synthpy| replace:: *Synthpy*
+.. |synthpy| replace:: *SynthPy*
 """
 
 # -- Project information ------------------------------------------------------
@@ -111,7 +111,7 @@ release = setup_cfg['version']
 # Please update these texts to match the name of your package.
 html_theme_options = {
     'logotext1': ' ',
-    'logotext2': 'Synthpy',  # white,  semi-bold
+    'logotext2': 'SynthPy',  # white,  semi-bold
     'logotext3': ':docs'   # white,  light
 }
 # Add/Update "html_theme_options" like this on your conf.py
@@ -170,7 +170,7 @@ if eval(setup_cfg.get('edit_on_github')):
     if versionmod.version.release:
         edit_on_github_branch = "v" + versionmod.version.version
     else:
-        edit_on_github_branch = "master"
+        edit_on_github_branch = "main"
 
     edit_on_github_source_root = ""
     edit_on_github_doc_root = "docs"
@@ -199,7 +199,7 @@ exclude_patterns.append('*/make-data.*')
 #extensions += ['nbsphinx']
 #extensions += ['IPython.sphinxext.ipython_console_highlighting']
 
-extensions += ['sphinx.ext.mathjax','sphinx.ext.autodoc','sphinx.ext.autosectionlabel']
+extensions += ['sphinx.ext.mathjax','sphinx.ext.autodoc']
 mathjax_path = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML"
 
 # nbsphinx_execute_arguments = [
