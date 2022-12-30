@@ -12,6 +12,7 @@ __version__ = '20211205'  # yyyymmdd
 # Some of the software is from Yuan-Sen Ting's The_Payne repository
 # https://github.com/tingyuansen/The_Payne
 
+import io
 import os
 import gzip
 import numpy as np
@@ -38,10 +39,10 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 bolk = 1.38054e-16  # erg/ K
 cspeed = 2.99792458e5  # speed of light in km/s
 
-# Load the MARCS grid data and index
-marcs_index,marcs_data = load_marcs_grid()
-# Load the Kurucz grid data and index
-kurucz_index,kurucz_data = load_kurucz_grid()
+## Load the MARCS grid data and index
+#marcs_index,marcs_data = load_marcs_grid()
+## Load the Kurucz grid data and index
+#kurucz_index,kurucz_data = load_kurucz_grid()
 
 
 def read(modelfile):
@@ -55,21 +56,21 @@ def load_marcs_grid():
     # Separate lines
     count,data = 0,[]
     for i in range(len(index)):
-        lines1 = lines[count:count+tab['nlines'][i]]
-        count += tab['nlines'][i]
-        data.append(lines)
+        lines1 = lines[count:count+index['nlines'][i]]
+        count += index['nlines'][i]
+        data.append(lines1)
     return index,data
 
-def load_kuruczg_grid():
+def load_kurucz_grid():
     # Load the Kurucz/ATLAS grid data and index
     index = Table.read(utils.atmosdir()+'kurucz_index.fits')
     lines = dln.readlines(utils.atmosdir()+'kurucz_data.txt.gz')
     # Separate lines
     count,data = 0,[]
     for i in range(len(index)):
-        lines1 = lines[count:count+tab['nlines'][i]]
-        count += tab['nlines'][i]
-        data.append(lines)
+        lines1 = lines[count:count+index['nlines'][i]]
+        count += index['nlines'][i]
+        data.append(lines1)
     return index,data
 
 def read_kurucz_model(modelfile):
@@ -92,15 +93,20 @@ def read_kurucz_model(modelfile):
       List of [Teff, logg, vmicro].
     abu : list
       List of abundances.
+    tail : list
+      Two tail lines.
 
     Example
     -------
     
-    data,header,labels,abu = read_kurucz_model(modelfile)
+    data,header,labels,abu,tail = read_kurucz_model(modelfile)
   
     """
 
-    f = open(modelfile,'r')
+    if type(modelfile) is str:
+        f = open(modelfile,'r')
+    elif type(modelfile) is io.StringIO:    # StringIO input
+        f = modelfile
     line = f.readline()
     entries = line.split()
     assert (entries[0] == 'TEFF' and entries[2] == 'GRAVITY'), 'Cannot find Teff and logg in the file header'
@@ -206,16 +212,28 @@ def read_kurucz_model(modelfile):
         entries = dln.fread(line,fmt)
         data[i+2,:] = entries
 
+    # Get tail lines
+    tail = [f.readline().rstrip()]
+    tail += [f.readline().rstrip()]
+        
     # Get header
-    f.close()
     header = []
-    with open(modelfile,'r') as f:
-        line = ''
-        while line.startswith('READ DECK')==False:
-            line = f.readline()
-            header.append(line)
-
-    return data, header, labels, abu
+    if type(modelfile) is str:
+        f.close()
+        with open(modelfile,'r') as f:
+            line = ''
+            while line.startswith('READ DECK')==False:
+                line = f.readline().rstrip()
+                header.append(line)
+    elif type(modelfile) is io.StringIO:  # StringIO input
+        modelfile.seek(0)  # go to the beginning
+        with modelfile as f:
+            line = ''
+            while line.startswith('READ DECK')==False:
+                line = f.readline().rstrip()
+                header.append(line)        
+                
+    return data, header, labels, abu, tail
 
 
 def make_kurucz_header(labels,ndepths=80,abu=None,scale=1.0):
@@ -408,10 +426,13 @@ def read_marcs_model(modelfile):
   
     """  
 
-    if modelfile[-3:] == '.gz':
-        f = gzip.open(modelfile,'rt')
-    else:
-        f = open(modelfile,'r')
+    if type(modelfile) is str:
+        if modelfile[-3:] == '.gz':
+            f = gzip.open(modelfile,'rt')
+        else:
+            f = open(modelfile,'r')
+    elif type(modelfile) is io.StringIO:  # StringIO input
+        f = modelfile
     line = f.readline()
     line = f.readline()
     entries = line.split()
@@ -487,21 +508,29 @@ def read_marcs_model(modelfile):
     # Combine the two sets of columns
     data = np.hstack((data1,data2))
 
-    # Read the footer
-    footer = []
+    # Read the tail/footer
+    tail = []
     while (line.strip()!=''):
-        line = f.readline()
-        footer.append(line)
+        line = f.readline().rstrip()
+        tail.append(line)
     
     # Get the header
     header = []
-    with open(modelfile,'r') as f:
-        line = ''
-        while line.startswith('Model structure')==False:
-            line = f.readline()
-            header.append(line)
-            
-    return data, header, labels, abu, footer
+    if type(modelfile) is str:
+        with open(modelfile,'r') as f:
+            line = ''
+            while line.startswith('Model structure')==False:
+                line = f.readline().strip()
+                header.append(line)
+    elif type(modelfile) is io.StringIO:  # StringIO input
+        modelfile.seek(0)  # go to the beginning
+        with modelfile as f:
+            line = ''
+            while line.startswith('Model structure')==False:
+                line = f.readline().strip()
+                header.append(line)
+        
+    return data, header, labels, abu, tail
 
 
 def kurucz_grid(teff,logg,metal):
@@ -948,7 +977,7 @@ class Atmosphere(object):
         """ Read in a single Atmosphere file."""
         atmostype = identify_atmostype(mfile)
         if atmostype == 'kurucz':
-            data,header,params,abu = read_kurucz_model(mfile)
+            data,header,params,abu,tail = read_kurucz_model(mfile)
             labels = ['teff','logg','feh','vmicro']
             return KuruczAtmosphere(data,header,params,labels,abu)
         elif atmostype == 'marcs':
@@ -1331,7 +1360,433 @@ class MARCSAtmosphere(Atmosphere):
         f.close()
 
 
+###########   Atmosphere Grids  #################
 
+class KuruczGrid():
+    """ Grid of Kurucz model atmospheres."""
+    
+    def __init__(self):
+        # Load the data
+        kurucz_index, kurucz_data = load_kurucz_grid()
+        self.data = kurucz_data
+        self.index = kurucz_index
+        self.nmodels = len(self.index)
+        self.labels = ['teff','logg','metal','alpha']
+        self.ranges = np.zeros((4,2),float)
+        for i,n in enumerate(self.labels):
+            self.ranges[i,0] = np.min(self.index[n])
+            self.ranges[i,1] = np.max(self.index[n])            
+            setattr(self,self.labels[i],np.unique(self.index[n]))
+            
+    def __repr__(self):
+        out = self.__class__.__name__ + '({:d} models, '.format(self.nmodels)
+        ranges = []
+        for i in range(len(self.labels)):
+            ranges.append('{0:.2f}<={1:s}<={2:.2f}'.format(self.ranges[i,0],self.labels[i],self.ranges[i,1]))
+        out += ','.join(ranges)+')\n'
+        return out
+
+    def __len__(self):
+        return self.nmodels
+
+    def __getitem__(self,index):
+        return self.data[index]
+    
+    def __call__(self,teff,logg,metal,alpha):
+        # Check if it is in bounds
+        pars = [teff,logg,metal,alpha]
+        inside = True
+        for i in range(len(pars)):
+            inside &= (pars[i]>=self.ranges[i,0]) & (pars[i]<=self.ranges[i,1])
+        if inside==False:
+            raise Exception('Parameters are out of bounds')
+        # Check if we have this exact model
+        ind, = np.where((abs(self.index['teff']-teff) < 1) & (abs(self.index['logg']-logg)<0.01) &
+                        (abs(self.index['metal']-metal)<0.01) & (abs(self.index['alpha']-alpha)<0.01))
+        if len(ind)>0:
+            return self.data[ind[0]]
+        # Need to interpolate
+        lines = self.interpolate(teff,logg,metal,alpha)
+        return lines
+
+    def interpolate(self,teff,logg,metal,alpha):
+        """ Interpolate Kurucz model."""
+        ntau = 72
+        ncols = 10        
+
+        # timing
+        #  without alpha it takes ~1.5 sec
+        #  with alpha it takes ~2.8 sec
+        
+        # Linear Interpolation
+        tm1 = max(self.teff[np.where(self.teff <= teff)[0]])     # immediately inferior Teff
+        tp1 = min(self.teff[np.where(self.teff >= teff)[0]])     # immediately superior Teff
+        lm1 = max(self.logg[np.where(self.logg <= logg)[0]])     # immediately inferior logg
+        lp1 = min(self.logg[np.where(self.logg >= logg)[0]])     # immediately superior logg
+        mm1 = max(self.metal[np.where(self.metal <= metal)[0]])  # immediately inferior metal
+        mp1 = min(self.metal[np.where(self.metal >= metal)[0]])  # immediately superior metal       
+        # Need to interpolate alpha
+        aind, = np.where(abs(self.alpha-alpha)<0.01)
+        if len(aind)==0:
+            am1 = max(self.alpha[np.where(self.alpha <= alpha)[0]])     # immediately inferior alpha
+            ap1 = min(self.alpha[np.where(self.alpha >= alpha)[0]])     # immediately superior alpha
+
+        grid = np.zeros((2,2,2),dtype=np.float64)
+        if len(aind)==0:
+            grid = np.zeros((2,2,2,2),dtype=np.float64)        
+        
+        if (tp1 != tm1):
+            mapteff = (teff-tm1)/(tp1-tm1)
+        else:
+            mapteff = 0.5
+        if (lp1 != lm1):
+            maplogg = (logg-lm1)/(lp1-lm1)
+        else:
+            maplogg = 0.5
+        if (mp1 != mm1):
+            mapmetal = (metal-mm1)/(mp1-mm1)
+        else:
+            mapmetal = 0.5
+        if len(aind)==0:
+            mapalpha = (alpha-am1)/(ap1-am1)
+            
+        # Reading the corresponding models
+        tarr = [tm1,tm1,tm1,tm1, tp1,tp1,tp1,tp1]
+        larr = [lm1,lm1,lp1,lp1, lm1,lm1,lp1,lp1]
+        marr = [mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1]
+        aarr = [alpha,alpha,alpha,alpha,alpha,alpha,alpha,alpha]
+        npoints = 8
+        if len(aind)==0:
+            tarr = [tm1,tm1,tm1,tm1, tp1,tp1,tp1,tp1, tm1,tm1,tm1,tm1, tp1,tp1,tp1,tp1]
+            larr = [lm1,lm1,lp1,lp1, lm1,lm1,lp1,lp1, lm1,lm1,lp1,lp1, lm1,lm1,lp1,lp1]
+            marr = [mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1]
+            aarr = [am1,am1,am1,am1, am1,am1,am1,am1, ap1,ap1,ap1,ap1, ap1,ap1,ap1,ap1]
+            npoints = 16
+        modlist = []
+        trlist = []
+        for i in np.arange(npoints)+1:
+            lines = self(tarr[i-1],larr[i-1],marr[i-1],aarr[i-1])
+            # make io.StringIO object
+            iolines = io.StringIO('\n'.join(lines))
+            if i==1:
+                model,header,labels,abu,tail = read_kurucz_model(iolines)
+            else:
+                model,h,t,ab,tl = read_kurucz_model(iolines)
+            # Need to transpose the data, want [Ncols,Ntau]
+            model = model.T
+            
+	    # Getting the tauross scale
+            rhox = model[0,:]
+            kappaross = model[4,:]
+            tauross = np.zeros(ntau,dtype=np.float64)
+            tauross[0] = rhox[0]*kappaross[0]
+            for ii in np.arange(ntau-1)+1:
+                tauross[ii] = utils.trapz(rhox[0:ii+1],kappaross[0:ii+1])
+
+            modlist.append(model)
+            trlist.append(tauross)
+
+        model = np.zeros((ncols,ntau),dtype=np.float64)  # cleaning up for re-using the matrix
+
+        # Defining the mass (RHOX#gr cm-2) sampling 
+        tauross = trlist[0]       # re-using the vector tauross
+        bot_tauross = min([t[ntau-1] for t in trlist])
+        top_tauross = max([t[0] for t in trlist])
+        g, = np.where((tauross >= top_tauross) & (tauross <= bot_tauross))
+        tauross_new = dln.interp(np.linspace(0,1,len(g)),tauross[g],np.linspace(0,1,ntau),kind='linear')
+    
+        # Let's interpolate for every depth
+        points = (np.arange(2),np.arange(2),np.arange(2))
+        if len(aind)==0:
+            points = (np.arange(2),np.arange(2),np.arange(2),np.arange(2))
+        for i in np.arange(ntau-1)+1:
+            for j in range(ncols):
+                if len(aind)>0:
+                    grid[0,0,0] = dln.interp(trlist[0][1:],modlist[0][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,1] = dln.interp(trlist[1][1:],modlist[1][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,0] = dln.interp(trlist[2][1:],modlist[2][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,1] = dln.interp(trlist[3][1:],modlist[3][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,0] = dln.interp(trlist[4][1:],modlist[4][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,1] = dln.interp(trlist[5][1:],modlist[5][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,0] = dln.interp(trlist[6][1:],modlist[6][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,1] = dln.interp(trlist[7][1:],modlist[7][j,1:],tauross_new[i],kind='linear')
+                    model[j,i] = interpn(points,grid[:,:,:],(mapteff,maplogg,mapmetal),method='linear')
+
+                else:
+                    grid[0,0,0,0] = dln.interp(trlist[0][1:],modlist[0][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,1,0] = dln.interp(trlist[1][1:],modlist[1][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,0,0] = dln.interp(trlist[2][1:],modlist[2][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,1,0] = dln.interp(trlist[3][1:],modlist[3][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,0,0] = dln.interp(trlist[4][1:],modlist[4][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,1,0] = dln.interp(trlist[5][1:],modlist[5][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,0,0] = dln.interp(trlist[6][1:],modlist[6][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,1,0] = dln.interp(trlist[7][1:],modlist[7][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,0,1] = dln.interp(trlist[8][1:],modlist[8][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,1,1] = dln.interp(trlist[9][1:],modlist[9][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,0,1] = dln.interp(trlist[10][1:],modlist[10][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,1,1] = dln.interp(trlist[11][1:],modlist[11][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,0,1] = dln.interp(trlist[12][1:],modlist[12][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,1,1] = dln.interp(trlist[13][1:],modlist[13][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,0,1] = dln.interp(trlist[14][1:],modlist[14][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,1,1] = dln.interp(trlist[15][1:],modlist[15][j,1:],tauross_new[i],kind='linear')
+                    model[j,i] = interpn(points,grid[:,:,:,:],(mapteff,maplogg,mapmetal,mapalpha),method='linear')
+
+        for j in range(ncols):
+            model[j,0] = model[j,1]*0.999
+        
+        # Editing the header
+        header[0] = utils.strput(header[0],'%7.0f' % teff,4)
+        header[0] = utils.strput(header[0],'%8.5f' % logg,21)        
+        tmpstr1 = header[1]
+        tmpstr2 = header[4]
+        if (metal < 0.0):
+            if type == 'old':
+                header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),18)
+            else:
+                header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),8)
+            header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)
+        else:
+            if type == 'old':
+                header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),18)
+            else:
+                header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),8)
+                header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)            
+        header[22] = utils.strput(header[22],'%2i' % ntau,11)
+
+        # Now put it all together
+        lines = []
+        for i in range(len(header)):
+            lines.append(header[i])
+        if type == 'old':
+            for i in range(ntau):
+                lines.append('%15.8E %8.1f %9.3E %9.3E %9.3E %9.3E %9.3E' % tuple(model[:,i]))
+        else:
+            for i in range(ntau):
+                lines.append('%15.8E %8.1f %9.3E %9.3E %9.3E %9.3E %9.3E %9.3E %9.3E %9.3E' % tuple(model[:,i]))
+        for i in range(len(tail)):
+            if i!= len(tail)-1:
+                lines.append(tail[i])
+            else:
+                lines.append(tail[i])
+
+        return lines
+
+
+class MARCSGrid():
+    """ Grid of MARCS model atmospheres."""
+    
+    def __init__(self):
+        # Load the data
+        marcs_index, marcs_data = load_marcs_grid()
+        self.data = marcs_data
+        self.index = marcs_index
+        self.nmodels = len(self.index)
+        self.labels = ['teff','logg','metal','alpha']
+        self.ranges = np.zeros((4,2),float)
+        for i,n in enumerate(self.labels):
+            self.ranges[i,0] = np.min(self.index[n])
+            self.ranges[i,1] = np.max(self.index[n])            
+            setattr(self,self.labels[i],np.unique(self.index[n]))
+            
+    def __repr__(self):
+        out = self.__class__.__name__ + '({:d} models, '.format(self.nmodels)
+        ranges = []
+        for i in range(len(self.labels)):
+            ranges.append('{0:.2f}<={1:s}<={2:.2f}'.format(self.ranges[i,0],self.labels[i],self.ranges[i,1]))
+        out += ','.join(ranges)+')\n'
+        return out
+
+    def __len__(self):
+        return self.nmodels
+
+    def __getitem__(self,index):
+        return self.data[index]
+    
+    def __call__(self,teff,logg,metal,alpha):
+        # Check if it is in bounds
+        pars = [teff,logg,metal,alpha]
+        inside = True
+        for i in range(len(pars)):
+            inside &= (pars[i]>=self.ranges[i,0]) & (pars[i]<=self.ranges[i,1])
+        if inside==False:
+            raise Exception('Parameters are out of bounds')
+        # Check if we have this exact model
+        ind, = np.where((abs(self.index['teff']-teff) < 1) & (abs(self.index['logg']-logg)<0.01) &
+                        (abs(self.index['metal']-metal)<0.01) & (abs(self.index['alpha']-alpha)<0.01))
+        if len(ind)>0:
+            return self.data[ind[0]]
+        # Need to interpolate
+        lines = self.interpolate(teff,logg,metal,alpha)
+        return lines
+
+    def interpolate(self,teff,logg,metal,alpha,mtype='odfnew'):
+        """ Interpolate MARCS model."""
+
+    def interpolate(self,teff,logg,metal,alpha):
+        """ Interpolate Kurucz model."""
+        ntau = 56
+        ncols = 14        
+
+        # timing
+        #  without alpha it takes ~1.5 sec
+        #  with alpha it takes ~2.8 sec
+        
+        # Linear Interpolation
+        tm1 = max(self.teff[np.where(self.teff <= teff)[0]])     # immediately inferior Teff
+        tp1 = min(self.teff[np.where(self.teff >= teff)[0]])     # immediately superior Teff
+        lm1 = max(self.logg[np.where(self.logg <= logg)[0]])     # immediately inferior logg
+        lp1 = min(self.logg[np.where(self.logg >= logg)[0]])     # immediately superior logg
+        mm1 = max(self.metal[np.where(self.metal <= metal)[0]])  # immediately inferior metal
+        mp1 = min(self.metal[np.where(self.metal >= metal)[0]])  # immediately superior metal       
+        # Need to interpolate alpha
+        aind, = np.where(abs(self.alpha-alpha)<0.01)
+        if len(aind)==0:
+            am1 = max(self.alpha[np.where(self.alpha <= alpha)[0]])     # immediately inferior alpha
+            ap1 = min(self.alpha[np.where(self.alpha >= alpha)[0]])     # immediately superior alpha
+
+        grid = np.zeros((2,2,2),dtype=np.float64)
+        if len(aind)==0:
+            grid = np.zeros((2,2,2,2),dtype=np.float64)        
+        
+        if (tp1 != tm1):
+            mapteff = (teff-tm1)/(tp1-tm1)
+        else:
+            mapteff = 0.5
+        if (lp1 != lm1):
+            maplogg = (logg-lm1)/(lp1-lm1)
+        else:
+            maplogg = 0.5
+        if (mp1 != mm1):
+            mapmetal = (metal-mm1)/(mp1-mm1)
+        else:
+            mapmetal = 0.5
+        if len(aind)==0:
+            mapalpha = (alpha-am1)/(ap1-am1)
+            
+        # Reading the corresponding models
+        tarr = [tm1,tm1,tm1,tm1, tp1,tp1,tp1,tp1]
+        larr = [lm1,lm1,lp1,lp1, lm1,lm1,lp1,lp1]
+        marr = [mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1]
+        aarr = [alpha,alpha,alpha,alpha,alpha,alpha,alpha,alpha]
+        npoints = 8
+        if len(aind)==0:
+            tarr = [tm1,tm1,tm1,tm1, tp1,tp1,tp1,tp1, tm1,tm1,tm1,tm1, tp1,tp1,tp1,tp1]
+            larr = [lm1,lm1,lp1,lp1, lm1,lm1,lp1,lp1, lm1,lm1,lp1,lp1, lm1,lm1,lp1,lp1]
+            marr = [mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1]
+            aarr = [am1,am1,am1,am1, am1,am1,am1,am1, ap1,ap1,ap1,ap1, ap1,ap1,ap1,ap1]
+            npoints = 16
+        modlist = []
+        trlist = []
+        for i in np.arange(npoints)+1:
+            lines = self(tarr[i-1],larr[i-1],marr[i-1],aarr[i-1])
+            # make io.StringIO object
+            iolines = io.StringIO('\n'.join(lines))
+            if i==1:
+                model,header,labels,abu,tail = read_marcs_model(iolines)
+            else:
+                model,h,t,ab,tl = read_marcs_model(iolines)
+            # Need to transpose the data, want [Ncols,Ntau]
+            model = model.T
+
+            import pdb; pdb.set_trace()
+            
+	    # Getting the tauross scale
+            rhox = model[0,:]
+            kappaross = model[4,:]
+            tauross = np.zeros(ntau,dtype=np.float64)
+            tauross[0] = rhox[0]*kappaross[0]
+            for ii in np.arange(ntau-1)+1:
+                tauross[ii] = utils.trapz(rhox[0:ii+1],kappaross[0:ii+1])
+
+            modlist.append(model)
+            trlist.append(tauross)
+
+        model = np.zeros((ncols,ntau),dtype=np.float64)  # cleaning up for re-using the matrix
+
+        # Defining the mass (RHOX#gr cm-2) sampling 
+        tauross = trlist[0]       # re-using the vector tauross
+        bot_tauross = min([t[ntau-1] for t in trlist])
+        top_tauross = max([t[0] for t in trlist])
+        g, = np.where((tauross >= top_tauross) & (tauross <= bot_tauross))
+        tauross_new = dln.interp(np.linspace(0,1,len(g)),tauross[g],np.linspace(0,1,ntau),kind='linear')
+    
+        # Let's interpolate for every depth
+        points = (np.arange(2),np.arange(2),np.arange(2))
+        if len(aind)==0:
+            points = (np.arange(2),np.arange(2),np.arange(2),np.arange(2))
+        for i in np.arange(ntau-1)+1:
+            for j in range(ncols):
+                if len(aind)>0:
+                    grid[0,0,0] = dln.interp(trlist[0][1:],modlist[0][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,1] = dln.interp(trlist[1][1:],modlist[1][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,0] = dln.interp(trlist[2][1:],modlist[2][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,1] = dln.interp(trlist[3][1:],modlist[3][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,0] = dln.interp(trlist[4][1:],modlist[4][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,1] = dln.interp(trlist[5][1:],modlist[5][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,0] = dln.interp(trlist[6][1:],modlist[6][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,1] = dln.interp(trlist[7][1:],modlist[7][j,1:],tauross_new[i],kind='linear')
+                    model[j,i] = interpn(points,grid[:,:,:],(mapteff,maplogg,mapmetal),method='linear')
+
+                else:
+                    grid[0,0,0,0] = dln.interp(trlist[0][1:],modlist[0][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,1,0] = dln.interp(trlist[1][1:],modlist[1][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,0,0] = dln.interp(trlist[2][1:],modlist[2][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,1,0] = dln.interp(trlist[3][1:],modlist[3][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,0,0] = dln.interp(trlist[4][1:],modlist[4][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,1,0] = dln.interp(trlist[5][1:],modlist[5][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,0,0] = dln.interp(trlist[6][1:],modlist[6][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,1,0] = dln.interp(trlist[7][1:],modlist[7][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,0,1] = dln.interp(trlist[8][1:],modlist[8][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,1,1] = dln.interp(trlist[9][1:],modlist[9][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,0,1] = dln.interp(trlist[10][1:],modlist[10][j,1:],tauross_new[i],kind='linear')
+                    grid[0,1,1,1] = dln.interp(trlist[11][1:],modlist[11][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,0,1] = dln.interp(trlist[12][1:],modlist[12][j,1:],tauross_new[i],kind='linear')
+                    grid[1,0,1,1] = dln.interp(trlist[13][1:],modlist[13][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,0,1] = dln.interp(trlist[14][1:],modlist[14][j,1:],tauross_new[i],kind='linear')
+                    grid[1,1,1,1] = dln.interp(trlist[15][1:],modlist[15][j,1:],tauross_new[i],kind='linear')
+                    model[j,i] = interpn(points,grid[:,:,:,:],(mapteff,maplogg,mapmetal,mapalpha),method='linear')
+
+        for j in range(ncols):
+            model[j,0] = model[j,1]*0.999
+        
+        # Editing the header
+        header[0] = utils.strput(header[0],'%7.0f' % teff,4)
+        header[0] = utils.strput(header[0],'%8.5f' % logg,21)        
+        tmpstr1 = header[1]
+        tmpstr2 = header[4]
+        if (metal < 0.0):
+            if type == 'old':
+                header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),18)
+            else:
+                header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),8)
+            header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)
+        else:
+            if type == 'old':
+                header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),18)
+            else:
+                header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),8)
+                header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)            
+        header[22] = utils.strput(header[22],'%2i' % ntau,11)
+
+        # Now put it all together
+        lines = []
+        for i in range(len(header)):
+            lines.append(header[i])
+        if type == 'old':
+            for i in range(ntau):
+                lines.append('%15.8E %8.1f %9.3E %9.3E %9.3E %9.3E %9.3E' % tuple(model[:,i]))
+        else:
+            for i in range(ntau):
+                lines.append('%15.8E %8.1f %9.3E %9.3E %9.3E %9.3E %9.3E %9.3E %9.3E %9.3E' % tuple(model[:,i]))
+        for i in range(len(tail)):
+            if i!= len(tail)-1:
+                lines.append(tail[i])
+            else:
+                lines.append(tail[i])
+
+        return lines
+    
+    
 # Class for model atmospheres
 
 #class ModelAtmos(object):

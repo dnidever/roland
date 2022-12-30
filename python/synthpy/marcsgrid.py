@@ -48,7 +48,9 @@ def readmarcs(filename):
 def convertall():
     """ Load all MARCS models and save to a pickle file."""
 
-    files = glob('/Users/nidever/marcs/mod_z*/s*.mod*')
+    sfiles = glob('/Users/nidever/marcs/mod_z*/s*.mod*')
+    pfiles = glob('/Users/nidever/marcs/mod_z*/p*.mod*')    
+    files = sfiles + pfiles
     nfiles = len(files)
     print(nfiles,' files')
     
@@ -58,8 +60,9 @@ def convertall():
     data = []
     linedata = []
     for i in range(nfiles):
+        lines1 = dln.readlines(files[i])
         data1 = readmarcs(files[i])
-        lines1 = list(data1['lines'])
+        #lines1 = list(data1['lines'])
         filename = os.path.basename(files[i])
         tab['index'][i] = i
         tab['filename'][i] = filename
@@ -75,7 +78,7 @@ def convertall():
     Table(tab).write('/Users/nidever/marcs/marcs_index.fits',overwrite=True)
     dln.pickle('/Users/nidever/marcs/marcs_data.pkl',data)
     dln.writelines('/Users/nidever/marcs/marcs_data.txt',linedata)
-    subprocess.run(['gzip','--best','/Users/nidever/marcs/marcs_data.txt'])
+    subprocess.run(['gzip','-f','--best','/Users/nidever/marcs/marcs_data.txt'])
     
     import pdb; pdb.set_trace()
 
