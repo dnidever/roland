@@ -26,8 +26,8 @@ The various spectral synthesis packages that |synthpy| calls are not installed a
 is mostly Fortran or Julia and I didn't trust an automatic install for all of these.  However, they should be pretty
 to install.
 
-Synspec
--------
+1) Synspec
+----------
 
 ``Synspec`` is a package I created to redistribute the `Synspec <http://tlusty.oca.eu/Synspec49/synspec.html>`_ spectral
 synthesis package by Ivan Hubeny and Thierry Lanz and Python driver software mostly from Carlos Allende Prieto's
@@ -40,8 +40,8 @@ The easiest way to install the code is with pip.  This will compile the Fortran 
     pip install synspec
 
 
-Moogpy
-------
+2) Moogpy
+---------
 
 `Moogpy <https://github.com/dnidever/moogpy>`_ is a package I created to redistribute the `MOOG <https://www.as.utexas.edu/~chris/moog.html>`_
 spectral synthesis package by Chris Sneden with scattering improvements by `Jennifer Sobeck <https://github.com/jsobeck/MOOG-SCAT_basic_git>`_
@@ -54,11 +54,11 @@ The easiest way to install the code is with pip.  This will compile the Fortran 
     pip install moogpy
 
 
-Turbospectrum
--------------
+3) Turbospectrum
+----------------
 
 `Turbospectrum <https://github.com/dnidever/turbospectrum>`_ is a package I created to redistribute the
-`Turbospectrum  <https://github.com/bertrandplez/Turbospectrum_NLTE>`_spectral synthesis package by Bertrand Plez
+`Turbospectrum <https://github.com/bertrandplez/Turbospectrum_NLTE>`_ spectral synthesis package by Bertrand Plez
 and Python driver software.  
 
 The easiest way to install the code is with pip.  This will compile the Fortran code and install the binaries and Python software.
@@ -68,15 +68,15 @@ The easiest way to install the code is with pip.  This will compile the Fortran 
     pip install turbospectrum
 
 
-Korg
-----
+4) Korg
+-------
 
 `Korg <https://github.com/ajwheeler/Korg.jl>`_ is a new spectral synthesis package written by `Adam Wheeler <https://arxiv.org/abs/2211.00029>`_
 in the Julia programming language.
 
 ``Korg`` can be called from Python.  You'll need to install ``Julia`` on your system and install the ``IJulia``, ``PyPlot`` and ``Korg``.
 
-** Installing Julia**
+**Installing Julia**
 
 There are ``Julia`` installers for various systems available from the `downloads <https://julialang.org/downloads/>`_ page.
 Once I installed ``Julia`` on my Mac laptop, I had to run a few commands to make it callable:
@@ -87,14 +87,15 @@ Once I installed ``Julia`` on my Mac laptop, I had to run a few commands to make
     sudo rm -f /usr/local/bin/julia
     sudo ln -s /Applications/Julia-1.8.app/Contents/Resources/julia/bin/julia /usr/local/bin/julia
 
-** Installing Julia packages**
+**Installing Julia packages**
 
 After you have installed ``Julia`` it's pretty straightforward to download and install package directly from ``Julia`` itself.
 It has its own built-in package manager.
 
-.. code-block:: bash
+Start up Julia from the command-line:
 
-    # Start up Julia from the command-line:
+.. code-block:: julia
+
     % julia
                _
        _       _ _(_)_     |  Documentation: https://docs.julialang.org
@@ -107,15 +108,24 @@ It has its own built-in package manager.
 
     julia> 
 
-    # To download and install a Julia type a right bracket "]", this will take you into the Pkg package manager.
+To download and install a Julia type a right bracket "]", this will take you into the Pkg package manager.
+
+.. code-block:: julia
+		
     julia> ]
 
-    # Then you use the "add" command to install packages.  We need to add "Korg", "IJulia", "PyPlot", and "PyCall"
+Then you use the ``add`` command to install packages.  We need to add "Korg", "IJulia", "PyPlot", and "PyCall"
+
+.. code-block::	julia
+
     (@v1.8) pkg> add Korg
     ... messages
     (@v1.8) pkg>
 
-    # You can see the packages that you have installed with the "status" command.
+You can see the packages that you have installed with the ``status`` command.
+
+.. code-block::	julia
+    
     (@v1.8) pkg> status
     Status `~/.julia/environments/v1.8/Project.toml`
       [7073ff75] IJulia v1.23.3
@@ -124,7 +134,7 @@ It has its own built-in package manager.
       [d330b81b] PyPlot v2.11.0
     
 
-** Installing PyJulia **
+**Installing PyJulia**
 
 We also need to install ``pyjulia`` which is a Python package to communicate directly with Julia.
 It should be straightforward to pip install it.
