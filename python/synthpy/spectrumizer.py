@@ -1,6 +1,14 @@
 import numpy as np
 
+from . import linelists
+
 # Class for Spectrumizer object that creates a spectrum
+
+def microturbulence(logg,teff):
+    """ Calculate vmicro (km/s) given teff and logg."""
+    # From Holtzman+2018, equation 2
+    return 10**(0.226-0.0228*logg+0.0297*logg**2-0.0113*logg**3)
+
 
 def spectrumizer(synthtype,*args,**kwargs):
     synthtype = synthtype.lower()
@@ -17,14 +25,56 @@ def spectrumizer(synthtype,*args,**kwargs):
         raise Exception('synthtype '+synthtype+' not supported')
 
 class Spectrumizer(object):
-    """ A class to generate a spectrum with a certain type of linelist, model atmosphere and spectral synthesis package."""
+    """
+    A class to generate a spectrum with a certain type of linelist, model atmosphere and spectral synthesis package.
     # Base class
+
+    Paramaters
+    ----------
+    synthtype : str
+       The type of synthesis program ot use.  "synspec", "moog", "turbo", or "korg".
+    linelists : list, optional
+       List of linelist file names.  By default, a large internal linelist will be used.
+        If the linelist is not in the format that the requested synthesis program requires, 
+        then it will be translated at instantiation time to a compatible format.
+        The accepted linelist formats for each synthesis package are:
+          synspec: synspec
+          moog: moog
+          turbo: turbospectrum
+          korg: vald, kurucz, kurucz_vac, and moog
+        The types of linelists formats that synthpy recognizes are: vald, moog, kurucz,
+          aspcap, synspec and turbospectrum.
+    atmos : str, optional
+       Type of model atmospheres to use.  The options are:
+         "atlasgrid" : The internal Kurucz/ATLAS grid with interpolation to the
+                         input Teff, logg, and [M/H].
+         "marcsgrid" : The internal MARCS grid with interpolation to the
+                         input Teff, logg, and [M/H].
+         "atmosnet" : The atmosnet artificial neural network package trained
+                         on a large grid of model atmospheres.  The input
+                         stellar parameters and abundances will be used to
+                         obtain the model.
+         <function> : A user-defined function that needs to be able to take
+                         as input Teff, logg, and [M/H]
+         If necessary, the model atmosphere will be converted to a format that
+         the requested synthesis package accepts:
+           synspec: Kurucz/ATLAS, MARCS, or TLUSTY
+           moog: Kurucz/ATLAS or MARCS
+           turbo: Kurucz/ATLAS or MARCS
+           korg: MARCS
+    wrange : list, optional
+       Two element wavelength range in A.  Default is [5000.0,6000.0].
+    dw : float, optional
+       Wavelength step.  Default is 0.1 A.
+
+    """
     
-    def __init__(self,linelist=None,atmos=None,wrange=[5000.0,6000.0],dw=0.1,synthtype='synspec',**kwargs):
-        # Use defaults if not input
-        self.linelist = linelist
-        self.atmos = atmos
+    def __init__(self,synthtype,linelist=None,atmos='atlasgrid',wrange=[5000.0,6000.0],dw=0.1,**kwargs):
         self.synthtype = synthtype.lower()
+        self._linelist = linelist
+        # Check if we need to translate the linelist
+        self.linelist = self.getlinelist(linelist)
+        self.atmos = atmos
         self.wrange = wrange
         self.dw = dw
         
@@ -33,19 +83,120 @@ class Spectrumizer(object):
         out += 'type={:s})\n'.format(self.synthtype)
         return out        
 
-    def __call__(self,*args,**kwargs):
-        # Genereate the synthetic spectrum with the given inputs
+    def __call__(self,teff,logg,**kwargs):
+        """
+        Genereate the synthetic spectrum with the given inputs
+
+        Parameters
+        ----------
+        teff : float
+           Effective temperature in K.
+        logg : float
+           Surface gravity.
+        mh : float, optional
+           Metallicity, [M/H].  Deftauls is 0.0 (solar).
+        am : float, optional
+           Alpha abundance, [alpha/M].  Default is 0.0 (solar).
+        cm : float, optional
+           Carbon abundance, [C/M].  Default is 0.0 (solar).
+        nm : float, optional
+           Nitrogen abundance, [N/M].  Default is 0.0 (solar).
+        vmicro : float, optional
+           Microturbulence in km/s.  Default is 2 km/s.
+        solarisotopes : bool, optional
+           Use solar isotope ratios, else "giant" isotope ratios ( default False ).
+        elems : list, optional
+           List of [element name, abundance] pairs.
+        wrange : list, optional
+           Two element wavelength range in A.  Default is [15000.0,17000.0].
+        dw : float, optional
+           Wavelength step.  Default is 0.1 A.
+        atmod : str, optional
+           Name of atmosphere model (default=None, model is determined from input parameters).
+        atmos_type : str, optional
+           Type of model atmosphere file.  Default is 'kurucz'.
+        dospherical : bool, optional
+           Perform spherically-symmetric calculations (otherwise plane-parallel).  Default is True.
+        linelists : list
+           List of linelist file names.
+        verbose : bool, optional
+           Verbose output to the screen.
+
+        Returns
+        -------
+        flux : numpy array
+           The fluxed synthetic spectrum.
+        continuum : numpy array
+           The continuum of the spectrum.
+        wave : numpy array
+           Wavelength array in A.
+
+        Example
+        -------
+
+        flux,cont,wave = self(5000.0,2.5,-1.0)
+        
+        """
+
         if 'wrange' not in kwargs.keys() and self.wrange is not None:
             kwargs['wrange'] = self.wrange
         if 'dw' not in kwargs.keys() and self.dw is not None:
             kwargs['dw'] = self.dw
-        if 'linelists' not in kwargs.keys() and self.linelists is not None:
-            kwargs['linelists'] = self.linelists
-        return self._synthesis(*args,**kwargs)
+        # If vmicro is not input then get it from the stellar parameters
+        if kwargs.get('vmicro') is None:
+            kwargs['vmicro'] = microturbulence(logg,teff)
+        #if 'linelists' not in kwargs.keys() and self.linelists is not None:
+        #    kwargs['linelists'] = self.linelists
+        # Get the linelist based on puts
+        kwargs['atmod'] = self.getlinelist(teff,logg,**kwargs)
+        # Get the model atmosphere
+        kwargs['linelists'] = self.getlinelist(teff,logg,**kwargs)
+        return self._synthesis(teff,logg,**kwargs)
 
-    def getatmos(self,*pars):
+    def getlinelist(self,*kwargs):
         """ Return the model atmosphere."""
-        pass
+        if kwargs.get('linelists') is None:
+            # Use initially input linelists
+            linelist = self.linelists
+        else:
+            linelists = kwargs['linelists']
+            # Check if we need to translate
+            linetype = linelists.autoidentifytype(linelists)
+            import pdb; pdb.set_trace()
+            #Converter()
+            #Linelist()
+        # Trim the linelist to the input wrange
+        import pdb; pdb.set_trace()
+
+        return linelist
+            
+    def getatmos(self,*kwargs):
+        """ Return the model atmosphere."""
+        if kwargs.get('atmod') is not None:
+            return kwargs['atmod']
+        if kwargs.get('atmod') is None and self.atmos is not None:
+            # Get the model atmosphere
+            # "atlasgrid" : The internal Kurucz/ATLAS grid with interpolation to the
+            #             input Teff, logg, and [M/H].
+            
+            # "marcsgrid" : The internal MARCS grid with interpolation to the
+            #             input Teff, logg, and [M/H].
+            
+            # "atmosnet" : The atmosnet artificial neural network package trained
+            #             on a large grid of model atmospheres.  The input
+            #             stellar parameters and abundances will be used to
+            #             obtain the model.
+            
+            # <function> : A user-defined function that needs to be able to take
+            #             as input Teff, logg, and [M/H]
+
+            # Translate if necessary for the synthesis program
+            # atmos.kurucz2turbo(), marcs2turbo()
+            # fraunhofer, marcs.py readmarcs() reads marcs file and gets essential info for Korg
+            # fraunhofer, models.py has interpolation code
+            
+        raise Exception('No model atmosphere to work with')
+
 
 class SynspecSpectrumizer(Spectrumizer):
     

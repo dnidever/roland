@@ -1,7 +1,12 @@
 import numpy as np
 
+def atmosdir():
+    """ Return the model atmospheres directory."""
+    fil = os.path.abspath(__file__)
+    codedir = os.path.dirname(fil)
+    datadir = codedir+'/atmos/'
+    return datadir
 
-# The data directory
 def datadir():
     """ Return the  data/ directory."""
     fil = os.path.abspath(__file__)
@@ -369,3 +374,40 @@ def elements(husser=False):
         sol[i+1] = 10.**(sol[i+1]-12.0)
 
     return (symbol,mass,sol)
+
+
+def strput(a,inp,pos):
+    """ Put a substring into a string."""
+    temp = list(a)
+    temp[pos:pos+len(inp)] = list(inp)
+    return ''.join(temp)
+
+
+def trapz(x,y):
+    """
+       Numerical integration using the composed trapezoidal rule
+
+       int[f(x)dx] ~= 1/2 (y1*(X2-X1)+yn*(Xn-Xn-1))+ 1/2*sum_i[yi*(Xi+1-Xi-1)]
+
+       IN: x   - fltarr        abscisas
+           y   - fltarr        ordinates
+
+       OUT: trazp - float      the numerical approx. to the integral of y(x)
+       
+       NOTE: double precision is used
+
+       C. Allende Prieto, Sep 1998
+       ", March 2010, changed loop variable to long
+    """
+    
+    n = len(x)-1
+    trapz = 0.5*y[0]*(x[1]-x[0])
+    for i in np.arange(n-1)+1:
+        trapz = trapz+0.5*y[i]*(x[i+1]-x[i-1])
+
+    if (n > 0):
+        trapz = trapz+0.5*y[n]*(x[n]-x[n-1])
+
+    return trapz
+
+
