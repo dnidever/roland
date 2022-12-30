@@ -46,10 +46,10 @@ class Spectrumizer(object):
           aspcap, synspec and turbospectrum.
     atmos : str, optional
        Type of model atmospheres to use.  The options are:
-         "atlasgrid" : The internal Kurucz/ATLAS grid with interpolation to the
-                         input Teff, logg, and [M/H].
+         "kuruczgrid" : The internal Kurucz/ATLAS grid with interpolation to the
+                         input Teff, logg, [M/H], and [alpha/M].
          "marcsgrid" : The internal MARCS grid with interpolation to the
-                         input Teff, logg, and [M/H].
+                         input Teff, logg, [M/H], and [alpha/M].
          "atmosnet" : The atmosnet artificial neural network package trained
                          on a large grid of model atmospheres.  The input
                          stellar parameters and abundances will be used to
@@ -69,12 +69,30 @@ class Spectrumizer(object):
 
     """
     
-    def __init__(self,synthtype,linelist=None,atmos='atlasgrid',wrange=[5000.0,6000.0],dw=0.1,**kwargs):
+    def __init__(self,synthtype,linelist=None,atmos='kuruczgrid',wrange=[5000.0,6000.0],dw=0.1):
         self.synthtype = synthtype.lower()
         self._linelist = linelist
         # Check if we need to translate the linelist
         self.linelist = self.getlinelist(linelist)
         self.atmos = atmos
+        # "atlasgrid" : The internal Kurucz/ATLAS grid with interpolation to the
+        #             input Teff, logg, and [M/H].
+        if atmos.lower()=='kuruczgrid':
+            self._atmosfunc = atmospheres.KuruczGrid()
+        # "marcsgrid" : The internal MARCS grid with interpolation to the
+        #             input Teff, logg, and [M/H].
+        elif atmos.lower()=='marcsgrid':
+            self._atmosfunc = atmospheres.MARCSGrid()
+        # "atmosnet" : The atmosnet artificial neural network package trained
+        #             on a large grid of model atmospheres.  The input
+        #             stellar parameters and abundances will be used to
+        #             obtain the model.    
+        elif atmos.lower()=='atmosnet':
+            self._atmosfunc = atmospheres.KuruczGrid()
+        # <function> : A user-defined function that needs to be able to take
+        #             as input Teff, logg, and [M/H]            
+        elif type(atmos) is function:
+            self._atmosfunc = atmos
         self.wrange = wrange
         self.dw = dw
         
@@ -146,9 +164,9 @@ class Spectrumizer(object):
         if kwargs.get('vmicro') is None:
             kwargs['vmicro'] = microturbulence(logg,teff)
         if kwargs.get('mh'] is None:
-            mh = 0.0
-        else:
-            mh = kwargs['mh']
+            kwargs['mh'] = 0.0
+        if kwargs.get('ah'] is None:
+            kwargs['am'] = 0.0
         #if 'linelists' not in kwargs.keys() and self.linelists is not None:
         #    kwargs['linelists'] = self.linelists
         # Get the linelist based on puts
@@ -181,26 +199,28 @@ class Spectrumizer(object):
         if kwargs.get('atmod') is None and self.atmos is not None:
             # Get the model atmosphere            
             mh = kwargs['mh']
+            am = kwargs['am']
             # "atlasgrid" : The internal Kurucz/ATLAS grid with interpolation to the
             #             input Teff, logg, and [M/H].
-            if self.atmos=='atlastgrid':
-                atmod = atmospheres.kurucz_grid(teff,logg,metal)
+            if self.atmos=='kuruczgrid':
+                atmod = self._atmosfunc(teff,logg,mh,am)
+                atmos_type = 'kurucz'
             # "marcsgrid" : The internal MARCS grid with interpolation to the
             #             input Teff, logg, and [M/H].
             if self.atmos=='marcsgrid':
-                atmod = atmospheres.marcs_grid(teff,logg,metal)
+                atmod = self._atmosfunc(teff,logg,mh,am)                
                 atmos_type = 'marcs'
             # "atmosnet" : The atmosnet artificial neural network package trained
             #             on a large grid of model atmospheres.  The input
             #             stellar parameters and abundances will be used to
             #             obtain the model.
-            if self.atmos=='atmostnet':
-                atmod = atmosnet(teff,logg,metal)
+            if self.atmos=='atmosnet':
+                atmod = atmosnet(teff,logg,mh,am)
                 atmos_type = 'kurucz'
             # <function> : A user-defined function that needs to be able to take
             #             as input Teff, logg, and [M/H]
             if type(self.atmos) is function:
-                atmod = self.atmos(teff,logg,metal)
+                atmod = self.atmos(teff,logg,mh,am)
             else:
                 raise Exception(str(self.atmos)+' not supported')
             
@@ -209,6 +229,8 @@ class Spectrumizer(object):
             # fraunhofer, marcs.py readmarcs() reads marcs file and gets essential info for Korg
             # fraunhofer, models.py has interpolation code
             import pdb; pdb.set_trace()
+
+            return atmod
             
         raise Exception('No model atmosphere to work with')
 
