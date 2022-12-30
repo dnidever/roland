@@ -21,6 +21,7 @@ from glob import glob
 from astropy.io import fits
 import astropy.units as u
 from astropy.table import Table,QTable
+from scipy.interpolate import interp1d, interpn
 from dlnpyutils import (utils as dln, bindata, astro)
 import copy
 import dill as pickle
@@ -37,9 +38,39 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 bolk = 1.38054e-16  # erg/ K
 cspeed = 2.99792458e5  # speed of light in km/s
 
+# Load the MARCS grid data and index
+marcs_index,marcs_data = load_marcs_grid()
+# Load the Kurucz grid data and index
+kurucz_index,kurucz_data = load_kurucz_grid()
+
+
 def read(modelfile):
     """ Convenience function to read in a model atmosphere file."""
     return Atmosphere.read(modelfile)
+
+def load_marcs_grid():
+    # Load the MARCS grid data and index
+    index = Table.read(utils.atmosdir()+'marcs_index.fits')
+    lines = dln.readlines(utils.atmosdir()+'marcs_data.txt.gz')
+    # Separate lines
+    count,data = 0,[]
+    for i in range(len(index)):
+        lines1 = lines[count:count+tab['nlines'][i]]
+        count += tab['nlines'][i]
+        data.append(lines)
+    return index,data
+
+def load_kuruczg_grid():
+    # Load the Kurucz/ATLAS grid data and index
+    index = Table.read(utils.atmosdir()+'kurucz_index.fits')
+    lines = dln.readlines(utils.atmosdir()+'kurucz_data.txt.gz')
+    # Separate lines
+    count,data = 0,[]
+    for i in range(len(index)):
+        lines1 = lines[count:count+tab['nlines'][i]]
+        count += tab['nlines'][i]
+        data.append(lines)
+    return index,data
 
 def read_kurucz_model(modelfile):
     """
@@ -473,7 +504,7 @@ def read_marcs_model(modelfile):
     return data, header, labels, abu, footer
 
 
-def kurucz_grid(teff,logg,mh):
+def kurucz_grid(teff,logg,metal):
     """ Get a model atmosphere from the Kurucz grid."""
     tid,modelfile = tempfile.mkstemp(prefix="kurucz")
     os.close(tid)  # close the open file
@@ -482,9 +513,23 @@ def kurucz_grid(teff,logg,mh):
     mteff = dln.limit(teff,3500.0,60000.0)
     mlogg = dln.limit(logg,0.0,5.0)
     mmetal = dln.limit(metal,-2.5,0.5)
-    model, header, tail = mkkuruczmodel(mteff,mlogg,mmh,modelfile)
+    model, header, tail = mkkuruczmodel(mteff,mlogg,mmetal,modelfile)
     return modelfile
 
+def marcs_grid(teff,logg,metal):
+    """ Get a model atmosphere from MARCS grid."""
+    tid,modelfile = tempfile.mkstemp(prefix="marcs")
+    os.close(tid)  # close the open file
+    # Load the MARCS grid data and index
+    mlist = dln.unpickle(utils.atmosdir()+'marcs_data.pkl')
+    mindex = Table.read(utils.atmosdir()+'marcs_index.fits')
+    # Limit values
+    #  of course the logg/feh ranges vary with Teff
+    mteff = dln.limit(teff,2800.0,8000.0)
+    mlogg = dln.limit(logg,0.0,3.0)
+    mmetal = dln.limit(metal,-2.5,1.0)
+    model, header, tail = mkmarcsmodel(mteff,mlogg,mmetal,modelfile)
+    return modelfile
 
 def read_kurucz_grid(teff,logg,metal,mtype='odfnew'):
     """ Read a Kurucz model from the large grid."""
@@ -504,7 +549,7 @@ def read_kurucz_grid(teff,logg,metal,mtype='odfnew'):
     else:
         s4 = 'k2odfnew.dat'
 
-    filename = modeldir()+s1+s2+s3+s4
+    filename = utils.atmosdir()+s1+s2+s3+s4
 
     teffstring = '%7.0f' % teff   # string(teff,format='(f7.0)')
     loggstring = '%8.5f' % logg   # string(logg,format='(f8.5)')
@@ -813,24 +858,24 @@ def kurucz_interp(teff,logg,metal,mtype='odfnew'):
         
 
     # Editing the header
-    header[0] = strput(header[0],'%7.0f' % teff,4)
-    header[0] = strput(header[0],'%8.5f' % logg,21)
+    header[0] = utils.strput(header[0],'%7.0f' % teff,4)
+    header[0] = utils.strput(header[0],'%8.5f' % logg,21)
 
     tmpstr1 = header[1]
     tmpstr2 = header[4]
     if (metal < 0.0):
         if type == 'old':
-            header[1] = strput(header[1],'-%3.1f' % abs(metal),18)
+            header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),18)
         else:
-            header[1] = strput(header[1],'-%3.1f' % abs(metal),8)
-        header[4] = strput(header[4],'%9.5f' % 10**metal,16)
+            header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),8)
+        header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)
     else:
         if type == 'old':
-            header[1] = strput(header[1],'+%3.1f' % abs(metal),18)
+            header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),18)
         else:
-            header[1] = strput(header[1],'+%3.1f' % abs(metal),8)
-        header[4] = strput(header[4],'%9.5f' % 10**metal,16)            
-    header[22] = strput(header[22],'%2i' % ntau,11)
+            header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),8)
+        header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)            
+    header[22] = utils.strput(header[22],'%2i' % ntau,11)
 
     return model, header, tail
 

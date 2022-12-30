@@ -145,6 +145,10 @@ class Spectrumizer(object):
         # If vmicro is not input then get it from the stellar parameters
         if kwargs.get('vmicro') is None:
             kwargs['vmicro'] = microturbulence(logg,teff)
+        if kwargs.get('mh'] is None:
+            mh = 0.0
+        else:
+            mh = kwargs['mh']
         #if 'linelists' not in kwargs.keys() and self.linelists is not None:
         #    kwargs['linelists'] = self.linelists
         # Get the linelist based on puts
@@ -175,25 +179,36 @@ class Spectrumizer(object):
         if kwargs.get('atmod') is not None:
             return kwargs['atmod']
         if kwargs.get('atmod') is None and self.atmos is not None:
-            # Get the model atmosphere
+            # Get the model atmosphere            
+            mh = kwargs['mh']
             # "atlasgrid" : The internal Kurucz/ATLAS grid with interpolation to the
             #             input Teff, logg, and [M/H].
-            
+            if self.atmos=='atlastgrid':
+                atmod = atmospheres.kurucz_grid(teff,logg,metal)
             # "marcsgrid" : The internal MARCS grid with interpolation to the
             #             input Teff, logg, and [M/H].
-            
+            if self.atmos=='marcsgrid':
+                atmod = atmospheres.marcs_grid(teff,logg,metal)
+                atmos_type = 'marcs'
             # "atmosnet" : The atmosnet artificial neural network package trained
             #             on a large grid of model atmospheres.  The input
             #             stellar parameters and abundances will be used to
             #             obtain the model.
-            
+            if self.atmos=='atmostnet':
+                atmod = atmosnet(teff,logg,metal)
+                atmos_type = 'kurucz'
             # <function> : A user-defined function that needs to be able to take
             #             as input Teff, logg, and [M/H]
-
+            if type(self.atmos) is function:
+                atmod = self.atmos(teff,logg,metal)
+            else:
+                raise Exception(str(self.atmos)+' not supported')
+            
             # Translate if necessary for the synthesis program
             # atmos.kurucz2turbo(), marcs2turbo()
             # fraunhofer, marcs.py readmarcs() reads marcs file and gets essential info for Korg
             # fraunhofer, models.py has interpolation code
+            import pdb; pdb.set_trace()
             
         raise Exception('No model atmosphere to work with')
 
