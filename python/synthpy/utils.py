@@ -15,6 +15,20 @@ def datadir():
     datadir = codedir+'/data/'
     return datadir
 
+def make_parser(fieldwidths):
+    """ Make efficient fixed-with parser"""
+    # https://stackoverflow.com/questions/4914008/how-to-efficiently-parse-fixed-width-files
+    cuts = tuple(cut for cut in accumulate(abs(fw) for fw in fieldwidths))
+    pads = tuple(fw < 0 for fw in fieldwidths) # bool flags for padding fields
+    flds = tuple(zip_longest(pads, (0,)+cuts, cuts))[:-1]  # ignore final one
+    slcs = ', '.join('line[{}:{}]'.format(i, j) for pad, i, j in flds if not pad)
+    parse = eval('lambda line: ({})\n'.format(slcs))  # Create and compile source code.
+    # Optional informational function attributes.
+    parse.size = sum(abs(fw) for fw in fieldwidths)
+    parse.fmtstring = ' '.join('{}{}'.format(abs(fw), 'x' if fw < 0 else 's')
+                                                for fw in fieldwidths)
+    return parse
+
 def fread(line,fmt):
     """
     Read the values in a string into variables using a format string.

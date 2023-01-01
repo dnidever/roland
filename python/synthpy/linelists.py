@@ -60,6 +60,76 @@ aspcap_molidinvert = {v: k for k, v in aspcap_molidconvert.items()}
 # Synspec: 596.0711 
 # Turbospectrum: 606:012013
 
+# compile fixed-format parsers for each format type
+
+aspcap_parser = lambda l: tuple((l[0:9].strip(),l[11:18].strip(),l[20:27].strip(),l[29:33].strip(),
+                                 l[35:38].strip(),l[38:45].strip(),l[47:50].strip(),l[52:60].strip(),
+                                 l[60:72].strip(),l[72:77].strip(),l[77:88].strip(),l[88:100].strip(),
+                                 l[100:105].strip(),l[105:116].strip(),l[116:122].strip(),
+                                 l[122:128].strip(),l[128:134].strip(),l[136:138].strip(),
+                                 l[138:140].strip(),l[140:143].strip(),l[143:149].strip(),
+                                 l[149:152].strip(),l[152:158].strip(),l[158:163].strip(),
+                                 l[163:168].strip(),l[168:169].strip(),l[169:170].strip(),
+                                 l[170:171].strip(),l[171:172].strip(),l[172:173].strip(),
+                                 l[173:174].strip(),l[174:179].strip(),l[179:184].strip(),
+                                 l[184:187].strip(),l[187:193].strip()))
+
+akurucz_parser = lambda l: tuple((l[0:11].strip(),l[11:18].strip(),l[18:24].strip(),l[24:36].strip(),
+                                  l[36:41].strip(),l[43:53].strip(),l[53:65].strip(),l[65:70].strip(),
+                                  l[72:82].strip(),l[82:88].strip(),l[88:94].strip(),l[94:100].strip(),
+                                  l[100:104].strip(),l[104:106].strip(),l[106:108].strip(),
+                                  l[108:111].strip(),l[111:117].strip(),l[117:120].strip(),
+                                  l[120:126].strip(),l[126:131].strip(),l[131:136].strip(),
+                                  l[138:139].strip(),l[139:140].strip(),l[142:143].strip(),
+                                  l[143:144].strip(),l[144:145].strip(),l[145:148].strip(),
+                                  l[148:153].strip(),l[153:158].strip()))
+
+mkurucz_parser = lambda l: tuple((l[0:10].strip(),l[10:17].strip(),l[17:22].strip(),l[22:32].strip(),
+                                  l[32:37].strip(),l[37:48].strip(),l[48:52].strip(),l[52:57].strip(),
+                                  l[63:68].strip(),l[74:76].strip()))
+
+asynspec_parser = lambda l: tuple((l[0:11].strip(),l[11:18].strip(),l[18:25].strip(),l[25:37].strip(),
+                                   l[37:43].strip(),l[43:55].strip(),l[55:61].strip(),l[61:68].strip(),
+                                   l[68:75].strip(),l[75:82].strip(),l[82:84].strip(),l[84:87].strip(),
+                                   l[87:90].strip(),l[90:93].strip(),l[93:96].strip(),l[96:99].strip(),
+                                   l[99:102].strip()))
+
+msynspec_parser = lambda l: tuple((l[0:10].strip(),l[10:20].strip(),l[20:27].strip(),l[27:39].strip(),
+                                   l[39:49].strip(),l[49:59].strip(),l[59:69].strip()))
+
+
+# first type of turbospectrum formats
+aturbo1_parser = lambda l: turple((l[0:10].split(),l[12:18].split(),l[20:27].split(),l[29:34].split(),
+                                   l[36:42].split(),l[44:53].split(),l[55:61].split(),l[67:68].split(),
+                                   l[74:75].split(),l[77:81].split(),l[83:87].split()))
+mturbo1_parser = lambda l: tuple((l[0:10].split(),l[12:18].split(),l[20:27].split(),l[29:34].split(),
+                                  l[36:42].split(),l[44:53].split(),l[55:61].split(),l[67:68].split(),
+                                  l[74:75].split(),l[77:81].split(),l[83:87].split()))
+
+# second type of turbospectrum formats
+mturbo2_parser = lambda l: tuple((l[0:10].split(),l[12:18].split(),l[20:27].split(),l[29:38].split(),
+                                  l[40:46].split(),l[48:57].split(),l[61:62].split(),l[68:69].split(),
+                                  l[73:76].split(),l[78:81].split(),l[85:91].split(),l[93:104].split(),
+                                  l[106:117].split()))
+aturbo2_parser = lambda l: tuple((l[0:10].split(),l[12:18].split(),l[20:27].split(),l[29:38].split(),
+                                  l[40:46].split(),l[48:57].split(),l[59:65].split(),l[69:70].split(),
+                                  l[76:77].split(),l[81:84].split(),l[86:89].split(),l[93:99].split(),
+                                  l[101:112].split(),l[114:125].split()))
+
+
+#fmtarr = []
+#count = 0
+#for i in range(len(fmt)):
+#    fmt1 = fmt[i]
+#    print(i,fmt1)    
+#    if fmt1.find('X')>-1:
+#        flen = int(fmt1[:-1])    
+#        count += flen
+#    else:
+#        flen = int(float(fmt1[1:]))
+#        fmtarr.append('l['+str(count)+':'+str(count+flen)+'].split()')
+#    count += flen
+
 def read(filename,*args,**kwargs):
     """ Convenient function for Linelist.read()"""
     return Linelist.read(filename,*args,**kwargs)
@@ -615,8 +685,11 @@ def convertfrom(info,intype):
         #    info['EP2'] *= 1.2389e-4
         # damping rad already okay
         # specid conversions
-        specid = str(info['id'])
-        num,decimal = specid.split('.')
+        try:
+            specid = str(info['id'])
+            num,decimal = specid.split('.')
+        except:
+            import pdb; pdb.set_trace()
         # atomic specid needs to be modified
         #  (eg. 2.00 = HeI; 26.00 = FeI; 26.01 = FeII; 6.03 = C IV)
         if int(num)<100:
@@ -961,10 +1034,11 @@ def reader_kurucz(line):
         # FORMAT(F11.4,F7.3,F6.2,F12.3,F5.2,1X,A10,F12.3,F5.2,1X,A10,
         # 3F6.2,A4,2I2,I3,F6.3,I3,F6.3,2I5,1X,A1,A1,1X,A1,A1,i1,A3.2I5,I6)
         # It looks like the last column does not exist
-        fmt = '(F11.4,F7.3,A6,F12.3,F5.2,1X,A10,F12.3,F5.2,1X,A10,'
-        fmt += '3F6.2,A4,2I2,I3,F6.3,I3,F6.3,2I5,1X,A1,A1,1X,A1,A1,A1,A3,2I5)'
-        out = utils.fread(line,fmt)
-
+        #fmt = '(F11.4,F7.3,A6,F12.3,F5.2,1X,A10,F12.3,F5.2,1X,A10,'
+        #fmt += '3F6.2,A4,2I2,I3,F6.3,I3,F6.3,2I5,1X,A1,A1,1X,A1,A1,A1,A3,2I5)'
+        #out = utils.fread(line,fmt)
+        out = akurucz_reader(line)
+        
         specid = out[2].strip()         # line identifier    
         lam = tofloat(out[0],u.nm)      # wavelength in nm
         loggf = out[1]                  # loggf (unitless)    
@@ -1036,8 +1110,10 @@ def reader_kurucz(line):
     # FORMAT(F10.4.F7.3,F5.1,F10.3,F5.1,F11.3,I4,A1,I2,A1,I1,3X,A1,I2,A1,I1,3X,I2)
     #fmt = '(F10.4,F7.3,F5.1,F10.3,F5.1,F11.3,I4,A1,I2,A1,I1,3X,A1,I2,A1,I1,3X,I2)'
     # read labels as a single value instead of four
-    fmt = '(F10.4,F7.3,F5.1,F10.3,F5.1,F11.3,I4,A5,3X,A5,3X,I2)'
-    out = utils.fread(line,fmt)
+    #fmt = '(F10.4,F7.3,F5.1,F10.3,F5.1,F11.3,I4,A5,3X,A5,3X,I2)'
+    #out = utils.fread(line,fmt)
+    out = mkurucz_reader(line)
+    
 
     # from http://kurucz.harvard.edu/linelists/linesmol/molbin.for
     #      PROGRAM MOLBIN
@@ -1188,13 +1264,19 @@ def reader_aspcap(line):
     #1500.4184  -1.460                               606.13   29732.079132.0      3A02F   36396.887133.0      3B05                                                                             
     #1500.4184  -4.179                  -4.149 Sey   607.13   28928.513 63.5      X12 2   35593.321 63.5      A13E1   
 
-    #fmt = "(F9.4,F7.3,F7.3,F4.2,A3,F7.3,A3,F8.2,F12.3,F5.1,A11,F12.3,F5.1,A11,"
-    #fmt += "F6.2,F6.2,F6.2,I2,I2,I3,F6.3,I3,F6.3,I5,I5,A1,I1,A1,A1,I1,A1,I5,I5,A3,F6.3)"
-    fmt = "(A9,1X,A7,1X,A7,1X,A4,1X,A3,A7,1X,A3,1X,A8,A12,A5,A11,A12,"
-    fmt += "A5,A11,A6,A6,A6,1X,A2,A2,A3,A6,A3,A6,A5,"
-    fmt += "A5,A1,A1,A1,A1,A1,A1,A5,A5,A3,A6)"    
-    out = utils.fread(line,fmt)
+    # Make sure it's the right length
+    nline = len(line)
+    if nline<186:
+        line += (186-nline)*' '
+    out = aspcap_parser(line)
     
+    ##fmt = "(F9.4,F7.3,F7.3,F4.2,A3,F7.3,A3,F8.2,F12.3,F5.1,A11,F12.3,F5.1,A11,"
+    ##fmt += "F6.2,F6.2,F6.2,I2,I2,I3,F6.3,I3,F6.3,I5,I5,A1,I1,A1,A1,I1,A1,I5,I5,A3,F6.3)"
+    #fmt = "(A9,1X,A7,1X,A7,1X,A4,1X,A3,A7,1X,A3,1X,A8,A12,A5,A11,A12,"
+    #fmt += "A5,A11,A6,A6,A6,1X,A2,A2,A3,A6,A3,A6,A5,"
+    #fmt += "A5,A1,A1,A1,A1,A1,A1,A5,A5,A3,A6)"    
+    #out = utils.fread(line,fmt)
+
     lam = tofloat(out[0],u.nm)   # wavelength in nm
     orggf = tofloat(out[1])
     newgf = tofloat(out[2])
@@ -1361,10 +1443,21 @@ def reader_synspec(line):
     #   510.6458  26.00 -2.560   56735.154   1.0   37157.564   2.0   8.25  -4.61  -7.45 0  5  2  0  5  1 -1
     #
 
+
+    #     9.6490  14.05-10.228    5090.000   0.5 1041472.000   1.5  10.51  -7.11  -8.18 0  2  1  0  2  2  0
+    #     9.6495  14.05 -9.827    5090.000   0.5 1041416.000   2.5  10.51  -7.11  -8.18 0  2  1  0  2  2  0
+
+    
     arr = line.split()
     
     # ATOMIC LINE
     if len(arr)>7:
+        # Make sure it's the right length
+        nline = len(line)
+        if nline<102:
+            line += (102-nline)*' '
+        arr = asynspec_parser(line)
+        
         # INLIN_grid is the actual function that reads in the list
         lam = tofloat(arr[0],u.nm)        # wavelength in nm
         specid = arr[1]
@@ -1414,13 +1507,33 @@ def reader_synspec(line):
         #  596.0729    606.00 -3.076   29190.339  0.63E+08  0.31E-04  0.10E-06
         #  596.0731    607.00 -5.860   20359.831  0.63E+08  0.31E-04  0.10E-06
 
-        lam = tofloat(arr[0],u.nm)       # wavelength in nm
-        specid = arr[1]
-        loggf = tofloat(arr[2])
-        ep = tofloat(arr[3],(1/u.cm))    # excitation potential of the lower level (in cm-1)
-        gamrad = tofloat(arr[4])
-        stark = tofloat(arr[5])
-        vdW = tofloat(arr[6])    
+        if len(arr)>4:
+            # Make sure it's the right length
+            nline = len(line)
+            if nline<69:
+                line += (69-nline)*' '
+            arr = msynspec_parser(line)
+
+            lam = tofloat(arr[0],u.nm)       # wavelength in nm
+            specid = arr[1]
+            loggf = tofloat(arr[2])
+            ep = tofloat(arr[3],(1/u.cm))    # excitation potential of the lower level (in cm-1)
+            gamrad = tofloat(arr[4])
+            stark = tofloat(arr[5])
+            vdW = tofloat(arr[6])    
+
+        # Only first 4 columns
+        #  slightly different format
+        else:
+            #   84.4941    101.00  -3.854       0.000'
+            # 40 characters
+            lam = tofloat(arr[0],u.nm)       # wavelength in nm
+            specid = arr[1]
+            loggf = tofloat(arr[2])
+            ep = tofloat(arr[3],(1/u.cm))    # excitation potential of the lower level (in cm-1)
+            gamrad = None
+            stark = None
+            vdW = None
         
         info = OrderedDict()
         info['id'] = specid
@@ -1547,13 +1660,15 @@ def reader_turbo(line):
     if tickpos==57 or (tickpos==-1 and len(line)<55):
         # probably only first six columns
         if tickpos==-1:
-            fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F5.2,1X,F6.1,1X,E9.2,1X,A6,3X,A1,3X,A1,1X,A4,1X,A4)'
-            out = utils.fread(line,fmt)
+            #fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F5.2,1X,F6.1,1X,E9.2,1X,A6,3X,A1,3X,A1,1X,A4,1X,A4)'
+            #out = utils.fread(line,fmt)
+            out = aturbo1_reader(line)
         # normal molecular format
         else:
-            fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F5.2,1X,F6.1,1X,E9.2,1X,F6.3,3X,A1,3X,A1,1X,F4.1,1X,F4.1)'
-            out = utils.fread(line,fmt)    
-    
+            #fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F5.2,1X,F6.1,1X,E9.2,1X,F6.3,3X,A1,3X,A1,1X,F4.1,1X,F4.1)'
+            #out = utils.fread(line,fmt)    
+            out = mturbo2_reader(line)
+            
         lam = tofloat(out[0],u.AA)      # wavelength in Ang
         ep = tofloat(out[1],u.eV)      # excitation potential in eV, of the lower level
         loggf = out[2]
@@ -1616,14 +1731,16 @@ def reader_turbo(line):
     if tickpos<60:
         # first ' should be at character 53
         #  7626.509  0.086  -4.789      0.00   20.0  0.00E+00 'x' 'x'  0.0  1.0 ' 2  0 SR32  8.5 FeH     FX'
-        fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,'
-        fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'        
+        #fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,'
+        #fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'
+        out = mturbo2_parser(line)
     else:
         # first ' should be at character 61
         # 15062.414 23.593  -2.804      0.00    1.0  0.00e+00   0.00  'x' 'x' 0.0 1.0 'HE  I                         '
-        fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,1X,F6.2,'
-        fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'
-    out = utils.fread(line,fmt)    
+        #fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,1X,F6.2,'
+        #fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'
+        out = aturbo2_parser(line)        
+    #out = utils.fread(line,fmt)    
     
     lam = tofloat(out[0],u.AA)      # wavelength in Ang
     ep = tofloat(out[1],u.eV)      # excitation potential in eV, of lower level
@@ -1704,18 +1821,21 @@ def writer_moog(info,freeform=True):
     EP2 = info.get('EP2')
 
     # Check that we have the essentials
-    if lam is None or loggf is None or specid is None or ((ep is None) and (EP1 is None or EP2 is None)):
+    if lam is None or loggf is None or specid is None or ((ep is None or np.ma.is_masked(ep)) and \
+       (EP1 is None or EP2 is None)):
         raise ValueError('Need at least lambda,loggf,specid,ep or (EP1,EP2) for MOOG format')
     
-    if ep is None:
-        # Calculate excaitation potential from EP1 and EP2
-        if (float(EP1.value) < 0):
-            ep = -float(EP1.value)
+    if ep is None or np.ma.is_masked(ep):
+        # Calculate excitation potential from EP1 and EP2
+        EP1 = EP1.value
+        EP2 = EP2.value
+        if (float(EP1) < 0):
+            ep = -float(EP1)
         else:
-            ep = float(EP1.value)
-        if (float(EP2.value) < 0):
-            EP2 = -float(EP2.value)
-        if (float(EP2.value) < float(ep)):
+            ep = float(EP1)
+        if (float(EP2) < 0):
+            EP2 = -float(EP2)
+        if (float(EP2) < float(ep)):
             ep = float(EP2)
     else:
         ep = ep.value
@@ -1787,16 +1907,18 @@ def writer_vald(info):
     if lam is None or loggf is None or specid is None or ((ep is None) and (EP1 is None or EP2 is None)):
         raise ValueError('Need at least lambda,loggf,specid,ep or (EP1,EP2) for VALD format')
 
-    # Calculate excitation potential from EP1 and EP2    
-    if ep is None:
-        if (float(EP1.value) < 0):
-            ep = -float(EP1.value)
+    # Calculate excitation potential from EP1 and EP2
+    if ep is None or np.ma.is_masked(ep):
+        EP1 = EP1.value
+        EP2 = EP2.value
+        if (float(EP1) < 0):
+            ep = -float(EP1)
         else:
-            ep = float(EP1.value)
-        if (float(EP2.value) < 0):
-            EP2 = -float(EP2.value)
-        if (float(EP2.value) < float(ep)):
-            ep = float(EP2.value)
+            ep = float(EP1)
+        if (float(EP2) < 0):
+            EP2 = -float(EP2)
+        if (float(EP2) < float(ep)):
+            ep = float(EP2)
     else:
         ep = ep.value
     vmicro = info.get('vmicro')
@@ -2391,7 +2513,7 @@ def writer_turbo(info):
         raise ValueError('Need lambda, id, name and loggf for Turbospectrum format')
     ep = info.get('ep')
     gu = info.get('gu')
-    if ep is None or gu is None:
+    if ep is None or np.ma.is_masked(ep) or gu is None or np.ma.is_masked(gu):
         # compute ep from individual energy levels
         EP1 = info.get('EP1')
         J1 = info.get('J1')  
@@ -2669,10 +2791,10 @@ class Reader(object):
                     return None
                 newpos = self.position[self._count]
                 self.file.seek(newpos)
-                line = self.file.readline()
+                line = self.file.readline().rstrip()
                 self._count += 1                
             else:
-                line = self.file.readline()
+                line = self.file.readline().rstrip()
                 self._count += 1
             # Empty string means we are done
             if line=='':
@@ -2697,10 +2819,10 @@ class Reader(object):
                         return None
                     newpos = self.position[self._count]
                     self.file.seek(newpos)
-                    line = self.file.readline()
+                    line = self.file.readline().rstrip()
                     self._count += 1                    
                 else:
-                    line = self.file.readline()
+                    line = self.file.readline().rstrip()
                     self._count += 1
             # Parse the header lines
             # atomic list
