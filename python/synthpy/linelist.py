@@ -1,3 +1,13 @@
+#!/usr/bin/env python
+
+"""LINELIST.PY - Model for Linelists
+"""
+
+from __future__ import print_function
+
+__authors__ = 'David Nidever <dnidever@montana.edu>'
+__version__ = '20221205'  # yyyymmdd
+
 import os
 import numpy as np
 import warnings

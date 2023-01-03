@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""ATMOSPHERES.PY - Model for model atmospheres
+"""ATMOSPHERE.PY - Model for model atmospheres
 
 """
 
@@ -309,8 +309,6 @@ def make_kurucz_header(params,ndepths=72,abund=None,vmicro=2.0,YHe=0.07834):
     else:
         alpha = 0.0
         
-
-        
     # Use feh for scale
     scale = 10**metal
     
@@ -472,10 +470,10 @@ def read_marcs_model(modelfile):
     while entries[1] != 'Number':
         for word in entries: 
             abu.append( 10.**(float(word)-12.0) )
-        i += 1 
+            i += 1 
         line = f.readline()
         entries = line.split() 
-
+        
     if i < 99: 
         for j in range(99-i):
             abu.append(1e-111)
@@ -539,6 +537,91 @@ def read_marcs_model(modelfile):
         
     return data, header, labels, abu, tail
 
+def make_marcs_header(params,ndepths=56,abund=None,vmicro=2.0,YHe=0.07834):
+    """
+    Make MARCS model atmosphere header
+    params : teff, logg, metal, and alpha
+    abund : abundance in N(X)/N(H) format (linear)
+    """
+
+    #s6000_g+3.0_m1.0_t02_x3_z+0.00_a+0.00_c+0.00_n+0.00_o+0.00_r+0.00_s+0.00
+    #  6000.      Teff [K] f APOGEE Last iteration; yyyymmdd=20160916
+    #  7.3488E+10 Flux [erg/cm2/s]
+    #  1.0000E+03 Surface gravity [cm/s2]
+    #  2.0        Microturbulence parameter [km/s]
+    #  1.0        Mass [Msun]
+    # +0.00 +0.00 Metallicity [Fe/H] and [alpha/Fe]
+    #  3.6526E+11 Radius [cm] at Tau(Rosseland)=1.0
+    #    32.26405 Luminosity [Lsun]
+    #  1.50 8.00 0.076 0.00 are the convection parameters: alpha, nu, y and beta
+    #  0.73826 0.24954 1.22E-02 are X, Y and Z, 12C/13C=89 (=solar)
+    #Logarithmic chemical number abundances, H always 12.00
+    #  12.00  10.93   1.05   1.38   2.70   8.39   7.78   8.66   4.56   7.84
+    #   6.17   7.53   6.37   7.51   5.36   7.14   5.50   6.18   5.08   6.31
+    #   3.17   4.90   4.00   5.64   5.39   7.45   4.92   6.23   4.21   4.60
+    #   2.88   3.58   2.29   3.33   2.56   3.25   2.60   2.92   2.21   2.58
+    #   1.42   1.92 -99.00   1.84   1.12   1.66   0.94   1.77   1.60   2.00
+    #   1.00   2.19   1.51   2.24   1.07   2.17   1.13   1.70   0.58   1.45
+    # -99.00   1.00   0.52   1.11   0.28   1.14   0.51   0.93   0.00   1.08
+    #   0.06   0.88  -0.17   1.11   0.23   1.25   1.38   1.64   1.01   1.13
+    #   0.90   2.00   0.65 -99.00 -99.00 -99.00 -99.00 -99.00 -99.00   0.06
+    # -99.00  -0.52
+    #  56 Number of depth points
+
+    teff = params[0]
+    logg = params[1]
+    metal = params[2]
+    if len(params)>3:
+        alpha = params[3]
+    else:
+        alpha = 0.0
+
+    abu = abund.copy()
+        
+    # MARCS models have H=12.0, only up to 92
+    # read_marcs_model() returns
+    # 10**(abu-12.0)
+    # 1e-111 for 93-99
+
+    symbol,mass,_ = utils.elements()
+    
+    # X is the mass fraction in H
+    # Y is the mass fraction in He
+    # Z is the mass fraction in Li+
+    totmass = np.sum(np.array(abu)*np.array(mass))
+    X = abu[0]*mass[0] / totmass
+    Y = abu[1]*mass[1] / totmass
+    Z = 1 - X - Y
+    # [M/H]=+1.00  0.66521 0.22484 1.10E-01 are X, Y and Z, 12C/13C=89 (=solar)
+    # [M/H]=+0.50  0.71928 0.24312 3.76E-02 are X, Y and Z, 12C/13C=89 (=solar)
+    # [M/H]=+0.00  0.73826 0.24954 1.22E-02 are X, Y and Z, 12C/13C=89 (=solar)
+    # [M/H]=-1.00  0.74646 0.25231 1.23E-03 are X, Y and Z, 12C/13C=89 (=solar)
+    # [M/H]=-2.50  0.74735 0.25261 3.91E-05 are X, Y and Z, 12C/13C=89 (=solar)
+        
+    header = ['s{:d}_g{:+3.1}_z{:+4.2f}_a{:+4.2f}'.format(int(teff),logg,metal,alpha),
+              '  {:d}.      Teff [K] f'.format(int(teff)),
+              '  7.3488E+10 Flux [erg/cm2/s]',
+              '  {:10.4E} Surface gravity [cm/s2]'.format(10**logg),
+              '  {:3.1f}        Microturbulence parameter [km/s]'.format(vmicro),
+              '  1.0        Mass [Msun]',
+              ' {:+4.1f} {:+4.1f} Metallicity [Fe/H] and [alpha/Fe]'.format(metal,alpha),
+              '  3.6526E+11 Radius [cm] at Tau(Rosseland)=1.0',
+              '    32.26405 Luminosity [Lsun]',
+              '  1.50 8.00 0.076 0.00 are the convection parameters: alpha, nu, y and beta',
+              '  {:7.5f} {:7.5f} {:8.2E} are X, Y and Z, 12C/13C=89 (=solar)'.format(X,Y,Z),
+              'Logarithmic chemical number abundances, H always 12.00']
+    abuline = ''
+    for i in range(92):
+        abuline += '{:7.2f}'.format(np.log10(abu[i])+12.0)
+    # split into 10 elements per line, 10
+    abulines = []
+    for i in range(10):
+        abulines.append(abuline[i*70:i*70+70])
+    header += abulines
+    header += ['  {:2d} Number of depth points'.format(ndepths)]
+    header += ['Model structure']
+    
+    return header
 
 def kurucz_grid(teff,logg,metal):
     """ Get a model atmosphere from the Kurucz grid."""
@@ -2033,34 +2116,9 @@ class KuruczGrid():
                     grid[1,1,0,1] = modlist[14][j,i]
                     grid[1,1,1,1] = modlist[15][j,i]
                     model[j,i] = interpn(points,grid[:,:,:,:],(mapteff,maplogg,mapmetal,mapalpha),method='linear')
-
-        #for j in range(ncols):
-        #    model[j,0] = model[j,1]*0.999
             
         # Vmicro
         model[6,:] = modlist[0][6,0]
-            
-        # Editing the header
-        #header[0] = utils.strput(header[0],'%7.0f' % teff,4)
-        #header[0] = utils.strput(header[0],'%8.5f' % logg,21)        
-        #tmpstr1 = header[1]
-        #tmpstr2 = header[4]
-        #if (metal < 0.0):
-        #    if type == 'old':
-        #        header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),18)
-        #    else:
-        #        header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),8)
-        #    header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)
-        #else:
-        #    if type == 'old':
-        #        header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),18)
-        #    else:
-        #        header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),8)
-        #        header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)            
-        #header[22] = utils.strput(header[22],'%2i' % ntau,11)
-
-        import pdb; pdb.set_trace()
-
 
         # Start with abundances of the reference model and modify as necessary (in N(X)/N(H))
         oldabu = abu.copy()   # save
@@ -2070,7 +2128,7 @@ class KuruczGrid():
         for i in [8,10,12,14,16,18,20,22]:
             abu[i-1] += alpha-refalpha
         abu[2:] = 10**abu[2:]             # back to linear
-        newheader = make_kurucz_header([teff,logg,metal,alpha],ndepths=ntau,abu=abu)
+        newheader = make_kurucz_header([teff,logg,metal,alpha],ndepths=ntau,abund=abu)
         
         # Now put it all together
         lines = []
@@ -2178,6 +2236,8 @@ class MARCSGrid():
         if len(aind)==0:
             am1 = max(self.alpha[np.where(self.alpha <= alpha)[0]])     # immediately inferior alpha
             ap1 = min(self.alpha[np.where(self.alpha >= alpha)[0]])     # immediately superior alpha
+        else:
+            am1 = alpha
             
         grid = np.zeros((2,2,2),dtype=np.float64)
         if len(aind)==0:
@@ -2273,6 +2333,8 @@ class MARCSGrid():
             iolines = io.StringIO('\n'.join(lines))
             if i==1:
                 model,header,labels,abu,tail = read_marcs_model(iolines)
+                refmetal = marr[i-1]
+                refalpha = aarr[i-1]
             else:
                 model,h,t,ab,tl = read_marcs_model(iolines)
             # Need to transpose the data, want [Ncols,Ntau]
@@ -2332,15 +2394,17 @@ class MARCSGrid():
         model[0,:] = logtauross
 
         # NOTE: The partial pressures are NOT interpolated
-            
-        # Editing the header
-        header[1] = '{:6d}. {:s}'.format(int(teff),header[1][8:])     # change Teff
-        header[3] = '{:12.4E} {:s}'.format(10**logg,header[3][13:])   # change logg
-        smetal = '{:+6.2f}'.format(metal)
-        salpha = '{:+6.2f}'.format(alpha)
-        header[6] = smetal+salpha+header[6][12:]                      # change metal and alpha
 
-        # We should also edit the abundances for the correct metallicity and alpha
+        # Start with abundances of the reference model and modify as necessary (in N(X)/N(H))
+        oldabu = np.array(abu).copy()   # save
+        # Fix the metallicity and alpha abundance
+        abu = np.array(abu)
+        abu[2:] = np.log10(abu[2:])       # switch to log temporarily
+        abu[2:] += metal-refmetal
+        for i in [8,10,12,14,16,18,20,22]:
+            abu[i-1] += alpha-refalpha
+        abu[2:] = 10**abu[2:]             # back to linear
+        newheader = make_marcs_header([teff,logg,metal,alpha],ndepths=ntau,abund=abu)
         
         # First set of columns
         # Model structure
