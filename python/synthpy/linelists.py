@@ -400,9 +400,11 @@ def convertto(info,outtype):
     # wavelength in Ang and vacuum
     # energy levels in eV
     # specid in turbospectrum format
+    # damping values are log
+    
     # -- MOOG --
     if outtype=='moog':
-        # energy levels, rad already okay
+        # energy levels, rad already okay 
         # wavelengths from vacuum to air, both Ang
         if info['airwave']==False and info['lambda'].value>2000.0:
             info['lambda'] = utils.vactoair(info['lambda'].value) * u.AA
@@ -426,10 +428,12 @@ def convertto(info,outtype):
                 newid = num+'.0'+decimal[1:3]+decimal[3:5]
             else:
                 newid = num+'.0'
-            info['id'] = newid        
+            info['id'] = newid
     # -- VALD --
     elif outtype=='vald':
-        # wave, energy levels, rad already okay
+        # wave, energy levels, rad already okay (log)
+        if 'rad' in info.keys() and info.get('rad') > 50:
+            info['rad'] = np.log10(info['rad'])
         # specid conversions
         specid = str(info['id'])
         num,decimal = specid.split('.')
@@ -460,7 +464,9 @@ def convertto(info,outtype):
             info['EP2'] = info['EP2'].value / 1.2389e-4 * (1/u.cm)            
             #info['EP2'] /= 1.2389e-4
             #info['EP2'] *= (1/u.cm)            
-        # damping rad already okay
+        # damping rad already okay (log)
+        if 'rad' in info.keys() and info.get('rad') > 50:
+            info['rad'] = np.log10(info['rad'])
         # specid conversions
         specid = str(info['id'])
         num,decimal = specid.split('.')
@@ -491,7 +497,9 @@ def convertto(info,outtype):
             info['EP1'] = info['EP1'].value / 1.2389e-4 * (1/u.cm)
         if info.get('EP2') is not None and info.get('EP2').unit!=(1/u.cm):
             info['EP2'] = info['EP2'].value / 1.2389e-4 * (1/u.cm)            
-        # damping rad already okay
+        # damping rad already okay (log)
+        if 'rad' in info.keys() and info.get('rad') > 50:
+            info['rad'] = np.log10(info['rad'])
         # atomic specid already okay, 26.01
         specid = str(info['id'])
         num,decimal = specid.split('.')
@@ -519,7 +527,10 @@ def convertto(info,outtype):
             info['EP1'] = info['EP1'].value / 1.2389e-4 * (1/u.cm)
         if info.get('EP2') is not None and info.get('EP2').unit!=(1/u.cm):
             info['EP2'] = info['EP2'].value / 1.2389e-4 * (1/u.cm) 
-        # damping rad already okay
+        # damping rad already okay ( log)
+        if 'rad' in info.keys() and info.get('rad') > 50:
+            # convert from linear to log            
+            info['rad'] = np.log10(info['rad'])
         # specid conversions
         specid = str(info['id'])
         num,decimal = specid.split('.')
@@ -540,8 +551,8 @@ def convertto(info,outtype):
         if info['lambda'].unit != u.nm:
             info['lambda'] = utils.vactoair(info['lambda'].value) * u.AA
             info['airwave'] = True
-        # gamrad is 10^(Rad)-1, radiation damping constant
-        if info.get('rad') is not None:
+        # gamrad is 10^(Rad)-1, radiation damping constant, linear
+        if info.get('rad') is not None and info.get('rad')<50:
             info['rad'] = 10**info['rad']-1
         # atomic specid needs to be converted
         # molecular specid already okay
@@ -584,6 +595,7 @@ def convertfrom(info,intype):
     # wavelength in Ang
     # energy levels in eV
     # specid in turbospectrum format (three digits decimal for ionization/charge or isotopes)
+    # damping values are log
 
     # wavelength and excitation potentials have units now
     # convert wavelenght to Angstroms
@@ -711,7 +723,7 @@ def convertfrom(info,intype):
         #    info['EP1'] *= 1.2389e-4
         #if info.get('EP2') is not None:
         #    info['EP2'] *= 1.2389e-4
-        # damping rad already okay
+        # damping rad already okay (log)
         # specid conversions
         try:
             specid = str(info['id'])
@@ -744,7 +756,7 @@ def convertfrom(info,intype):
     elif (intype=='turbo' or intype=='turbospectrum'):    
         # wave, energy levels and specid already okay
         # gamrad is 10^(Rad)-1, radiation damping constant
-        if info.get('rad') is not None and info.get('rad')!= 0.0:
+        if info.get('rad') is not None and info.get('rad') > 0.0:
             info['rad'] = np.log10(info['rad']+1)
         # specid information comes mainly from the header lines
         # h20 is 010108.000000000, each atom gets 3 digits in decimal
@@ -897,7 +909,7 @@ def reader_vald(line):
     # wlcent        The central wavelength of the line in Angstrom (vacuum)
     # excit         The excitation energy in ?
     # gflog         The log of the product of the statistical weight of the lower level and the oscillator strength for the transition.
-    # gamrad        The radiation broadening parameter
+    # gamrad        The radiation broadening parameter, log
     # gamqst        A broadening parameter
     # gamvw         van der Waals broadening parameter
     # lande         The lande factor
@@ -1351,7 +1363,7 @@ def reader_aspcap(line):
     info['EP2'] = EP2
     info['J2'] = J2
     info['label2'] = label2
-    info['rad'] = rad           # Damping Rad (unitless)
+    info['rad'] = rad           # Damping Rad (unitless) log
     info['stark'] = stark       # Damping Stark (unitless)
     info['vdW'] = vdW           # Damping van der Waal (unitless)
     info['iso'] = iso1
@@ -2089,8 +2101,6 @@ def writer_vald(info):
     rad = info.get('rad')
     if rad is None:
         rad = 0.0
-    else:
-        rad = 10**(rad)-1
     stark = info.get('stark')
     if stark is None:
         stark = 0.0
@@ -2558,11 +2568,11 @@ def writer_synspec(info):
         raise ValueError('Need at least lambda,loggf,id,EP1,J1,EP2,J2 for Synspec format')
 
     # Optional values
-    gam = info.get('gam')
-    if gam is None:
-        gam = '   0.00'
+    rad = info.get('rad')
+    if rad is None:
+        rad = '   0.00'
     else:
-        gam = '{:7.2f}'.format(gam)
+        rad = '{:7.2f}'.format(rad)
     stark = info.get('stark')
     if stark is None:
         stark = '   0.00'
@@ -2583,7 +2593,7 @@ def writer_synspec(info):
     # Essential columns are lambda, orggf, specid, EP1, J1, EP2, J2
     # Missing values can be left blank    
     fmt = '{0:11.4f}{1:8.2f}{2:8.3f}{3:12.3f}{4:6.1f}{5:12.3f}{6:6.1f}{7:7s}{8:7s}{9:7s}{10:2s}\n'
-    line = fmt.format(lam.value,float(specid),loggf,EP1.value,J1,EP2.value,J2,gam,stark,vdW,inext)
+    line = fmt.format(lam.value,float(specid),loggf,EP1.value,J1,EP2.value,J2,rad,stark,vdW,inext)
     
     return line 
 
@@ -2769,10 +2779,6 @@ def writer_turbo(info):
                 EP2 = -float(EP2)
             if (float(EP2) < float(ep)):
                 ep = float(EP2); gu = (float(J1) * 2.0) + 1  
-                
-    # Check that we have the essentials
-    if lam is None or loggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
-        raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
 
     # Optional values
     label1 = info.get('label1')
@@ -2782,8 +2788,6 @@ def writer_turbo(info):
     rad = info.get('rad')
     if rad is None:
         rad = 0.0
-    #else:
-    #    rad = 10**rad-1
     stark = info.get('stark')
     if stark is None:
         stark = 0.0

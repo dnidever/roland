@@ -45,6 +45,32 @@ cspeed = 2.99792458e5  # speed of light in km/s
 #kurucz_index,kurucz_data = load_kurucz_grid()
 
 
+solar_abu_ntot = np.array([ 0.92040, 0.07834, -10.94, -10.64,
+                             -9.49,  -3.52,  -4.12,  -3.21,
+                             -7.48,  -3.96,  -5.71,  -4.46,
+                             -5.57,  -4.49,  -6.59,  -4.71,
+                             -6.54,  -5.64,  -6.92,  -5.68,
+                             -8.87,  -7.02,  -8.04,  -6.37,
+                             -6.65,  -4.54,  -7.12,  -5.79,
+                             -7.83,  -7.44,  -9.16,  -8.63,
+                             -9.67,  -8.63,  -9.41,  -8.73,
+                             -9.44,  -9.07,  -9.80,  -9.44,
+                            -10.62, -10.12, -20.00, -10.20,
+                            -10.92, -10.35, -11.10, -10.27,
+                            -10.38, -10.04, -11.04,  -9.80,
+                            -10.53,  -9.87, -10.91,  -9.91,
+                            -10.87, -10.46, -11.33, -10.54,
+                            -20.00, -11.03, -11.53, -10.92,
+                            -11.69, -10.90, -11.78, -11.11,
+                            -12.04, -10.96, -11.98, -11.16,
+                            -12.17, -10.93, -11.76, -10.59,
+                            -10.69, -10.24, -11.03, -10.91,
+                            -11.14, -10.09, -11.33, -20.00,
+                            -20.00, -20.00, -20.00, -20.00,
+                            -20.00, -11.95, -20.00, -12.54,
+                            -20.00, -20.00, -20.00, -20.00,
+                            -20.00, -20.00, -20.00])
+
 def read(modelfile):
     """ Convenience function to read in a model atmosphere file."""
     return Atmosphere.read(modelfile)
@@ -194,13 +220,17 @@ def read_kurucz_model(modelfile):
     # (1PE15.8,0PF9.1,1P7E10.3))
     # length of line is 94 characters long
     fmt9 = '(F15.8, F9.1, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3)'  # ATLAS9
-    fmt12 = '(F15.8, F9.1, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3)'          # ATLAS12
+    fmt12 = '(F15.8, F9.1, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3)'        # ATLAS12
+    fmt7 = '(F15.8, F9.1, F10.3, F10.3, F10.3, F10.3, F10.3)'                       # old
     if len(entries1)==10 or len(line)==104:
         fmt = fmt9
         ncol = 10
-    else:
+    elif len(entries1)==9:
         fmt = fmt12
         ncol = 9
+    else:
+        fmt = fmt7
+        ncol = 7
         
     # Get data
     data = np.zeros((nd,ncol),float)
@@ -236,13 +266,13 @@ def read_kurucz_model(modelfile):
     return data, header, labels, abu, tail
 
 
-def make_kurucz_header(labels,ndepths=80,abu=None,scale=1.0):
+def make_kurucz_header(params,ndepths=72,abund=None,vmicro=2.0,YHe=0.07834):
     """
     Make Kurucz model atmosphere header
-    abu : abundance in N(H) format (linear)
+    params : teff, logg, metal, and alpha
+    abund : abundance in N(X)/N(H) format (linear)
     """
 
-    
     # TEFF   3500.  GRAVITY 0.00000 LTE 
     #TITLE  [-1.5] N(He)/Ntot=0.0784 VTURB=2  L/H=1.25 NOVER                         
     # OPACITY IFOP 1 1 1 1 1 1 1 1 1 1 1 1 1 0 1 0 0 0 0 0
@@ -271,127 +301,102 @@ def make_kurucz_header(labels,ndepths=80,abu=None,scale=1.0):
     # 2.81685925E-02   1995.0 2.816E-02 1.999E+04 1.199E-05 1.919E-04 2.000E+05 0.000E+00 0.000E+00 8.548E+05
     # 3.41101002E-02   1995.0 3.410E-02 2.374E+04 1.463E-05 2.043E-04 2.000E+05 0.000E+00 0.000E+00 7.602E+05
 
-    teff = labels[0]
-    logg = labels[1]
-    feh = labels[2]
-
-    # Use feh for scale
-    scale = 10**feh
-    
-    # solar abundances
-    # first two are Teff and logg
-    # last two are Hydrogen and Helium
-    if abu is None:
-        abu = np.array([ 1.0, 0.085034, \
-                         -10.99, -10.66,  -9.34,  -3.61,  -4.21,\
-                         -3.35,  -7.48,  -4.11,  -5.80,  -4.44,\
-                         -5.59,  -4.53,  -6.63,  -4.92,  -6.54,\
-                         -5.64,  -7.01,  -5.70,  -8.89,  -7.09,\
-                         -8.11,  -6.40,  -6.61,  -4.54,  -7.05,\
-                         -5.82,  -7.85,  -7.48,  -9.00,  -8.39,\
-                         -9.74,  -8.70,  -9.50,  -8.79,  -9.52,\
-                         -9.17,  -9.83,  -9.46, -10.58, -10.16,\
-                         -20.00, -10.29, -11.13, -10.47, -11.10,\
-                         -10.33, -11.24, -10.00, -11.03,  -9.86,\
-                         -10.49,  -9.80, -10.96,  -9.86, -10.94,\
-                         -10.46, -11.32, -10.62, -20.00, -11.08,\
-                         -11.52, -10.97, -11.74, -10.94, -11.56,\
-                         -11.12, -11.94, -11.20, -11.94, -11.19,\
-                         -12.16, -11.19, -11.78, -10.64, -10.66,\
-                         -10.42, -11.12, -10.87, -11.14, -10.29,\
-                         -11.39, -20.00, -20.00, -20.00, -20.00,\
-                         -20.00, -20.00, -12.02, -20.00, -12.58,\
-                         -20.00, -20.00, -20.00, -20.00, -20.00,\
-                         -20.00, -20.00])
-        abu[2:] = 10**abu[2:]
-
-    # Abundances input
+    teff = params[0]
+    logg = params[1]
+    metal = params[2]
+    if len(params)>3:
+        alpha = params[3]
     else:
-        # scale down by feh
-        abu[2:] /= scale
+        alpha = 0.0
+        
 
         
-    # scale global metallicity
-    #abu[2:] += feh
+    # Use feh for scale
+    scale = 10**metal
+    
+    # Start with solar abundance and scale by metallicity and alpha
+    if abund is None:
+        abu = solar_abu_ntot
+        # Scale by the metallicity (while in log)
+        abu[2:] += metal
+        # Scale by alpha abundance (while in log)
+        if alpha != 0.0:
+            for i in [8,10,12,14,16,18,20,22]:
+                abu[i-1] += alpha
+        abu[2:] = 10**abu[2:]  # convert to linear        
+        abu[1:] /= abu[0]      # convert from N(X)/N(tot) -> N(X)/N(H)
+    else:
+        abu = abund.copy()
+        
+    # Convert from N(X)/N(H) -> N(X)/N(tot)
+    nhntot = abu[0]
+    abu[1:] *= nhntot 
+        
+    # Renormalize Hydrogen such that X+Y+Z=1
+    #  needs to be done with N(X)/N(tot) values
+    renormed_H = 1. - YHe - np.sum(abu[2:])
 
-    # renormalize Hydrogen such that X+Y+Z=1
-    solar_He = 0.07837
-    renormed_H = 1. - solar_He - np.sum(10.**abu[2:],axis=0)
-
-    # make formatted string arrays
-    abu0s = np.copy(abu).astype("str")
-    abu2s = np.copy(abu).astype("str")
-    abu3s = np.copy(abu).astype("str")
-    abu4s = np.copy(abu).astype("str")    
+    # Scale down by [M/H]
+    abu[2:] /= scale
+   
+    # Convert from linear to logarithmic
+    abu[2:] = np.log10(abu[2:])
+    
+    # Make formatted string arrays
+    a0s = np.copy(abu).astype("str")
+    a2s = np.copy(abu).astype("str")
+    a3s = np.copy(abu).astype("str")
+    a4s = np.copy(abu).astype("str")    
     # loop over all entries
     for p1 in range(abu.shape[0]):
         # make it to string
-        abu0s[p1] = '' + "%.0f" % abu[p1]
-        abu2s[p1] = ' ' + "%.2f" % abu[p1]
-        abu3s[p1] = ' ' + "%.3f" % abu[p1]
-        abu4s[p1] = '' + "%.4f" % abu[p1]
+        a0s[p1] = '' + "%.0f" % abu[p1]
+        a2s[p1] = ' ' + "%.2f" % abu[p1]
+        a3s[p1] = ' ' + "%.3f" % abu[p1]
+        a4s[p1] = '' + "%.4f" % abu[p1]
 
         # make sure it is the right Kurucz readable format
         if abu[p1] <= -9.995:
-            abu2s[p1] = abu2s[p1][1:]
+            a2s[p1] = a2s[p1][1:]
         if abu[p1] < -9.9995:
-            abu3s[p1] = abu3s[p1][1:]
+            a3s[p1] = a3s[p1][1:]
 
     # transform into text
     renormed_H_5s = "%.5f" % renormed_H
 
     ### include He ####
-    solar_He_5s = "%.5f" % solar_He
-            
+    He_5s = "%.5f" % YHe
+
+    #TEFF   3500.  GRAVITY 0.00000 LTE 
+    #TITLE  [-4.0a] N(He)/Ntot=0.0784 VTURB=2.0  L/H=1.25 NOVER                      
+    # OPACITY IFOP 1 1 1 1 1 1 1 1 1 1 1 1 1 0 1 0 0 0 0 0
+    # CONVECTION ON   1.25 TURBULENCE OFF  0.00  0.00  0.00  0.00
+    # https://wwwuser.oats.inaf.it/castelli/grids/gridp05ak2odfnew/ap05at6250g30k2odfnew.dat
+    
     # Construct the header
-    header = ['TEFF   ' +  abu0s[0] + '.  GRAVITY  ' + abu4s[1] + ' LTE \n',
-              'TITLE ATLAS12                                                                   \n',
-              # TITLE  [0.5a] VTURB=2  L/H=1.25 NOVER NEW ODF
-              # https://wwwuser.oats.inaf.it/castelli/grids/gridp05ak2odfnew/ap05at6250g30k2odfnew.dat
-              ' OPACITY IFOP 1 1 1 1 1 1 1 1 1 1 1 1 1 0 1 0 1 0 0 0\n',
-              ' CONVECTION ON   1.25 TURBULENCE OFF  0.00  0.00  0.00  0.00\n',
-              'ABUNDANCE SCALE   '+('%.5f' % scale)+' ABUNDANCE CHANGE 1 ' + renormed_H_5s + ' 2 ' + solar_He_5s + '\n',
-              #'ABUNDANCE SCALE   1.00000 ABUNDANCE CHANGE 1 ' + renormed_H_5s + ' 2 ' + solar_He_5s + '\n',              
-              ' ABUNDANCE CHANGE  3 ' + abu2s[ 2] + '  4 ' + abu2s[ 3] + '  5 ' + abu2s[ 4] + '  6 ' + abu2s[ 5] + '  7 ' + abu2s[ 6] + '  8 ' + abu2s[ 7] + '\n',
-              ' ABUNDANCE CHANGE  9 ' + abu2s[ 8] + ' 10 ' + abu2s[ 9] + ' 11 ' + abu2s[10] + ' 12 ' + abu2s[11] + ' 13 ' + abu2s[12] + ' 14 ' + abu2s[13] + '\n',
-              ' ABUNDANCE CHANGE 15 ' + abu2s[14] + ' 16 ' + abu2s[15] + ' 17 ' + abu2s[16] + ' 18 ' + abu2s[17] + ' 19 ' + abu2s[18] + ' 20 ' + abu2s[19] + '\n',
-              ' ABUNDANCE CHANGE 21 ' + abu2s[20] + ' 22 ' + abu2s[21] + ' 23 ' + abu2s[22] + ' 24 ' + abu2s[23] + ' 25 ' + abu2s[24] + ' 26 ' + abu2s[25] + '\n',
-              ' ABUNDANCE CHANGE 27 ' + abu2s[26] + ' 28 ' + abu2s[27] + ' 29 ' + abu2s[28] + ' 30 ' + abu2s[29] + ' 31 ' + abu2s[30] + ' 32 ' + abu2s[31] + '\n',
-              ' ABUNDANCE CHANGE 33 ' + abu2s[32] + ' 34 ' + abu2s[33] + ' 35 ' + abu2s[34] + ' 36 ' + abu2s[35] + ' 37 ' + abu2s[36] + ' 38 ' + abu2s[37] + '\n',
-              ' ABUNDANCE CHANGE 39 ' + abu2s[38] + ' 40 ' + abu2s[39] + ' 41 ' + abu2s[40] + ' 42 ' + abu2s[41] + ' 43 ' + abu2s[42] + ' 44 ' + abu2s[43] + '\n',
-              ' ABUNDANCE CHANGE 45 ' + abu2s[44] + ' 46 ' + abu2s[45] + ' 47 ' + abu2s[46] + ' 48 ' + abu2s[47] + ' 49 ' + abu2s[48] + ' 50 ' + abu2s[49] + '\n',
-              ' ABUNDANCE CHANGE 51 ' + abu2s[50] + ' 52 ' + abu2s[51] + ' 53 ' + abu2s[52] + ' 54 ' + abu2s[53] + ' 55 ' + abu2s[54] + ' 56 ' + abu2s[55] + '\n',
-              ' ABUNDANCE CHANGE 57 ' + abu2s[56] + ' 58 ' + abu2s[57] + ' 59 ' + abu2s[58] + ' 60 ' + abu2s[59] + ' 61 ' + abu2s[60] + ' 62 ' + abu2s[61] + '\n',
-              ' ABUNDANCE CHANGE 63 ' + abu2s[62] + ' 64 ' + abu2s[63] + ' 65 ' + abu2s[64] + ' 66 ' + abu2s[65] + ' 67 ' + abu2s[66] + ' 68 ' + abu2s[67] + '\n',
-              ' ABUNDANCE CHANGE 69 ' + abu2s[68] + ' 70 ' + abu2s[69] + ' 71 ' + abu2s[70] + ' 72 ' + abu2s[71] + ' 73 ' + abu2s[72] + ' 74 ' + abu2s[73] + '\n',
-              ' ABUNDANCE CHANGE 75 ' + abu2s[74] + ' 76 ' + abu2s[75] + ' 77 ' + abu2s[76] + ' 78 ' + abu2s[77] + ' 79 ' + abu2s[78] + ' 80 ' + abu2s[79] + '\n',
-              ' ABUNDANCE CHANGE 81 ' + abu2s[80] + ' 82 ' + abu2s[81] + ' 83 ' + abu2s[82] + ' 84 ' + abu2s[83] + ' 85 ' + abu2s[84] + ' 86 ' + abu2s[85] + '\n',
-              ' ABUNDANCE CHANGE 87 ' + abu2s[86] + ' 88 ' + abu2s[87] + ' 89 ' + abu2s[88] + ' 90 ' + abu2s[89] + ' 91 ' + abu2s[90] + ' 92 ' + abu2s[91] + '\n',
-              ' ABUNDANCE CHANGE 93 ' + abu2s[92] + ' 94 ' + abu2s[93] + ' 95 ' + abu2s[94] + ' 96 ' + abu2s[95] + ' 97 ' + abu2s[96] + ' 98 ' + abu2s[97] + '\n',   
-              ' ABUNDANCE CHANGE 99 ' + abu2s[98] + '\n',
-              #' ABUNDANCE TABLE\n',
-              #'    1H   ' + renormed_H_5s + '0       2He  ' + solar_He_5s + '0\n',
-              #'    3Li' + abu3s[ 2] + ' 0.000    4Be' + abu3s[ 3] + ' 0.000    5B ' + abu3s[ 4] + ' 0.000    6C ' + abu3s[ 5] + ' 0.000    7N ' + abu3s[ 6] + ' 0.000\n',
-              #'    8O ' + abu3s[ 7] + ' 0.000    9F ' + abu3s[ 8] + ' 0.000   10Ne' + abu3s[ 9] + ' 0.000   11Na' + abu3s[10] + ' 0.000   12Mg' + abu3s[11] + ' 0.000\n',
-              #'   13Al' + abu3s[12] + ' 0.000   14Si' + abu3s[13] + ' 0.000   15P ' + abu3s[14] + ' 0.000   16S ' + abu3s[15] + ' 0.000   17Cl' + abu3s[16] + ' 0.000\n',
-              #'   18Ar' + abu3s[17] + ' 0.000   19K ' + abu3s[18] + ' 0.000   20Ca' + abu3s[19] + ' 0.000   21Sc' + abu3s[20] + ' 0.000   22Ti' + abu3s[21] + ' 0.000\n',
-              #'   23V ' + abu3s[22] + ' 0.000   24Cr' + abu3s[23] + ' 0.000   25Mn' + abu3s[24] + ' 0.000   26Fe' + abu3s[25] + ' 0.000   27Co' + abu3s[26] + ' 0.000\n',
-              #'   28Ni' + abu3s[27] + ' 0.000   29Cu' + abu3s[28] + ' 0.000   30Zn' + abu3s[29] + ' 0.000   31Ga' + abu3s[30] + ' 0.000   32Ge' + abu3s[31] + ' 0.000\n',
-              #'   33As' + abu3s[32] + ' 0.000   34Se' + abu3s[33] + ' 0.000   35Br' + abu3s[34] + ' 0.000   36Kr' + abu3s[35] + ' 0.000   37Rb' + abu3s[36] + ' 0.000\n',
-              #'   38Sr' + abu3s[37] + ' 0.000   39Y ' + abu3s[38] + ' 0.000   40Zr' + abu3s[39] + ' 0.000   41Nb' + abu3s[40] + ' 0.000   42Mo' + abu3s[41] + ' 0.000\n',
-              #'   43Tc' + abu3s[42] + ' 0.000   44Ru' + abu3s[43] + ' 0.000   45Rh' + abu3s[44] + ' 0.000   46Pd' + abu3s[45] + ' 0.000   47Ag' + abu3s[46] + ' 0.000\n',
-              #'   48Cd' + abu3s[47] + ' 0.000   49In' + abu3s[48] + ' 0.000   50Sn' + abu3s[49] + ' 0.000   51Sb' + abu3s[50] + ' 0.000   52Te' + abu3s[51] + ' 0.000\n',
-              #'   53I ' + abu3s[52] + ' 0.000   54Xe' + abu3s[53] + ' 0.000   55Cs' + abu3s[54] + ' 0.000   56Ba' + abu3s[55] + ' 0.000   57La' + abu3s[56] + ' 0.000\n',
-              #'   58Ce' + abu3s[57] + ' 0.000   59Pr' + abu3s[58] + ' 0.000   60Nd' + abu3s[59] + ' 0.000   61Pm' + abu3s[60] + ' 0.000   62Sm' + abu3s[61] + ' 0.000\n',
-              #'   63Eu' + abu3s[62] + ' 0.000   64Gd' + abu3s[63] + ' 0.000   65Tb' + abu3s[64] + ' 0.000   66Dy' + abu3s[65] + ' 0.000   67Ho' + abu3s[66] + ' 0.000\n',
-              #'   68Er' + abu3s[67] + ' 0.000   69Tm' + abu3s[68] + ' 0.000   70Yb' + abu3s[69] + ' 0.000   71Lu' + abu3s[70] + ' 0.000   72Hf' + abu3s[71] + ' 0.000\n',
-              #'   73Ta' + abu3s[72] + ' 0.000   74W ' + abu3s[73] + ' 0.000   75Re' + abu3s[74] + ' 0.000   76Os' + abu3s[75] + ' 0.000   77Ir' + abu3s[76] + ' 0.000\n',
-              #'   78Pt' + abu3s[77] + ' 0.000   79Au' + abu3s[78] + ' 0.000   80Hg' + abu3s[79] + ' 0.000   81Tl' + abu3s[80] + ' 0.000   82Pb' + abu3s[81] + ' 0.000\n',
-              #'   83Bi' + abu3s[82] + ' 0.000   84Po' + abu3s[83] + ' 0.000   85At' + abu3s[84] + ' 0.000   86Rn' + abu3s[85] + ' 0.000   87Fr' + abu3s[86] + ' 0.000\n',
-              #'   88Ra' + abu3s[87] + ' 0.000   89Ac' + abu3s[88] + ' 0.000   90Th' + abu3s[89] + ' 0.000   91Pa' + abu3s[90] + ' 0.000   92U ' + abu3s[91] + ' 0.000\n',
-              #'   93NP' + abu3s[92] + ' 0.000   94Pu' + abu3s[93] + ' 0.000   95Am' + abu3s[94] + ' 0.000   96Cm' + abu3s[95] + ' 0.000   97Bk' + abu3s[96] + ' 0.000\n',
-              #'   98Cf' + abu3s[97] + ' 0.000   99Es' + abu3s[98] + ' 0.000\n',
-              'READ DECK6 '+str(ndepths)+' RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB, FLXCNV,VCONV,VELSND\n']
+    header = ['TEFF   {:d}.  GRAVITY {:6.5f} LTE '.format(int(teff),logg),
+              'TITLE  [{:+.1f}] N(He)/Ntot={:6.4f} VTURB={:.1f}  L/H=1.25 NOVER   '.format(metal,YHe,vmicro),
+              ' OPACITY IFOP 1 1 1 1 1 1 1 1 1 1 1 1 1 0 1 0 1 0 0 0',
+              ' CONVECTION ON   1.25 TURBULENCE OFF  0.00  0.00  0.00  0.00',
+              'ABUNDANCE SCALE   '+('%.5f' % scale)+' ABUNDANCE CHANGE 1 '+renormed_H_5s+' 2 '+He_5s,
+              ' ABUNDANCE CHANGE  3 '+a2s[ 2]+'  4 '+a2s[ 3]+'  5 '+a2s[ 4]+'  6 '+a2s[ 5]+'  7 '+a2s[ 6]+'  8 '+a2s[ 7],
+              ' ABUNDANCE CHANGE  9 '+a2s[ 8]+' 10 '+a2s[ 9]+' 11 '+a2s[10]+' 12 '+a2s[11]+' 13 '+a2s[12]+' 14 '+a2s[13],
+              ' ABUNDANCE CHANGE 15 '+a2s[14]+' 16 '+a2s[15]+' 17 '+a2s[16]+' 18 '+a2s[17]+' 19 '+a2s[18]+' 20 '+a2s[19],
+              ' ABUNDANCE CHANGE 21 '+a2s[20]+' 22 '+a2s[21]+' 23 '+a2s[22]+' 24 '+a2s[23]+' 25 '+a2s[24]+' 26 '+a2s[25],
+              ' ABUNDANCE CHANGE 27 '+a2s[26]+' 28 '+a2s[27]+' 29 '+a2s[28]+' 30 '+a2s[29]+' 31 '+a2s[30]+' 32 '+a2s[31],
+              ' ABUNDANCE CHANGE 33 '+a2s[32]+' 34 '+a2s[33]+' 35 '+a2s[34]+' 36 '+a2s[35]+' 37 '+a2s[36]+' 38 '+a2s[37],
+              ' ABUNDANCE CHANGE 39 '+a2s[38]+' 40 '+a2s[39]+' 41 '+a2s[40]+' 42 '+a2s[41]+' 43 '+a2s[42]+' 44 '+a2s[43],
+              ' ABUNDANCE CHANGE 45 '+a2s[44]+' 46 '+a2s[45]+' 47 '+a2s[46]+' 48 '+a2s[47]+' 49 '+a2s[48]+' 50 '+a2s[49],
+              ' ABUNDANCE CHANGE 51 '+a2s[50]+' 52 '+a2s[51]+' 53 '+a2s[52]+' 54 '+a2s[53]+' 55 '+a2s[54]+' 56 '+a2s[55],
+              ' ABUNDANCE CHANGE 57 '+a2s[56]+' 58 '+a2s[57]+' 59 '+a2s[58]+' 60 '+a2s[59]+' 61 '+a2s[60]+' 62 '+a2s[61],
+              ' ABUNDANCE CHANGE 63 '+a2s[62]+' 64 '+a2s[63]+' 65 '+a2s[64]+' 66 '+a2s[65]+' 67 '+a2s[66]+' 68 '+a2s[67],
+              ' ABUNDANCE CHANGE 69 '+a2s[68]+' 70 '+a2s[69]+' 71 '+a2s[70]+' 72 '+a2s[71]+' 73 '+a2s[72]+' 74 '+a2s[73],
+              ' ABUNDANCE CHANGE 75 '+a2s[74]+' 76 '+a2s[75]+' 77 '+a2s[76]+' 78 '+a2s[77]+' 79 '+a2s[78]+' 80 '+a2s[79],
+              ' ABUNDANCE CHANGE 81 '+a2s[80]+' 82 '+a2s[81]+' 83 '+a2s[82]+' 84 '+a2s[83]+' 85 '+a2s[84]+' 86 '+a2s[85],
+              ' ABUNDANCE CHANGE 87 '+a2s[86]+' 88 '+a2s[87]+' 89 '+a2s[88]+' 90 '+a2s[89]+' 91 '+a2s[90]+' 92 '+a2s[91],
+              ' ABUNDANCE CHANGE 93 '+a2s[92]+' 94 '+a2s[93]+' 95 '+a2s[94]+' 96 '+a2s[95]+' 97 '+a2s[96]+' 98 '+a2s[97],
+              ' ABUNDANCE CHANGE 99 '+a2s[98],
+              'READ DECK6 '+str(ndepths)+' RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB, FLXCNV,VCONV,VELSND']
     return header
 
 def read_marcs_model(modelfile):
@@ -981,12 +986,12 @@ class Atmosphere(object):
         atmostype = identify_atmostype(mfile)
         if atmostype == 'kurucz':
             data,header,params,abu,tail = read_kurucz_model(mfile)
-            labels = ['teff','logg','feh','vmicro']
-            return KuruczAtmosphere(data,header,params,labels,abu)
+            labels = ['teff','logg','feh','alpha','vmicro']
+            return KuruczAtmosphere(data,header,params,labels,abu,tail)
         elif atmostype == 'marcs':
-            data,header,params,abu,footer = read_marcs_model(mfile)
+            data,header,params,abu,tail = read_marcs_model(mfile)
             labels = ['teff','logg','feh','alpha','vmicro']            
-            return MARCSAtmosphere(data,header,params,labels,abu,footer)
+            return MARCSAtmosphere(data,header,params,labels,abu,tail)
         elif atmostype == 'phoenix':
             data,header,params,abu = read_phoenix_model(mfile)
             labels = ['teff','logg','feh','vmicro']            
@@ -1047,6 +1052,8 @@ class KuruczAtmosphere(Atmosphere):
         super().__init__(data,header,params,labels,abu,tail)
         if lines is not None:
             self._lines = lines  # save the lines input
+        else:
+            self._lines = None
         self.scale = scale        
         self.mtype = 'kurucz'
         self.columns = ['dmass','temperature','pressure','edensity',
@@ -1134,16 +1141,22 @@ class KuruczAtmosphere(Atmosphere):
     @property
     def fluxconv(self):
         """ Return flux transported by convection (FLXCNV) [ergs/s/cm2] versus depth."""
+        if self.ncols<8:
+            raise Exception('no fluxconv information')
         return self.data[:,7]    
 
     @property
     def velconv(self):
         """ Return convective velocity [cm/s]."""
+        if self.ncols<9:
+            raise Exception('no velconv information')
         return self.data[:,8]
 
     @property
     def velsound(self):
         """ Return sound velocity [cm/s]."""
+        if self.ncols<10:
+            raise Exception('no velsound information')        
         return self.data[:,9]
 
     @property
@@ -1152,10 +1165,12 @@ class KuruczAtmosphere(Atmosphere):
         if self._tauross is None:
             # According to Castelli & Kurucz (2003) each model has the same number of 72 plane parallel layers
             # from log tau ross = -6.875 to +2.00 at steps of log tau ross = 0.125
-            logtauross = np.arange(72)*0.125-6.875
-            tauross = 10**(logtauross)
-            self._tauross = tauross
-            #self._tauross = self._calc_tauross()
+            if self.ntau==72:
+                logtauross = np.arange(72)*0.125-6.875
+                tauross = 10**(logtauross)
+                self._tauross = tauross
+            else:
+                self._tauross = self._calc_tauross()
         return self._tauross
 
     def _calc_tauross(self):
@@ -1184,7 +1199,7 @@ class KuruczAtmosphere(Atmosphere):
         for i in range(ndata):
             # fmt9 = '(F15.8, F9.1, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3)'  # ATLAS9
             # fmt12 = '(F15.8, F9.1, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3, F10.3)'          # ATLAS12
-
+            # fmt7 = '(F15.8, F9.1, F10.3, F10.3, F10.3, F10.3, F10.3)'                       # old
             # Output 9 columns (ATLAS12 format) unless we have 10 columns
             if ncols==8:
                 newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E 0.000E+00' % tuple(data[i,:])
@@ -1192,6 +1207,9 @@ class KuruczAtmosphere(Atmosphere):
                 newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E' % tuple(data[i,:])                
             elif ncols==10:
                 newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E' % tuple(data[i,:])
+            elif ncols==7:
+                #READ DECK6 64 RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB
+                newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E' % tuple(data[i,:])                
             else:
                 raise ValueError('Only 8 or 10 columns supported')
             datalines.append(newline)
@@ -1293,6 +1311,10 @@ class KuruczAtmosphere(Atmosphere):
         # Interpolate log Tau 500nm
         model[:,1] = np.log10(tauross_new)  # ???
         # Interpolate depth in cm
+        dtau = np.gradient(tauross)
+        #thickness = np.gradient(self.depth)
+        #density = dtau/(self.kappaross*thickness)
+        
         #model[:,2] = np.interp(tauross_new,tauross,depth)
         # Interpolate temperature
         model[:,3] = np.interp(tauross_new,tauross,self.temperature)  # looks good
@@ -1429,6 +1451,8 @@ class MARCSAtmosphere(Atmosphere):
         super().__init__(data,header,params,labels,abu,tail)
         if lines is not None:
             self._lines = lines  # save the lines input
+        else:
+            self._lines = None            
         self.mtype = 'marcs'
         self.columns = ['tauross','tau5000','depth','temperature','epressure','gaspressure',
                         'radpressure','turbpressure','kappaross','density','mnmolecweight',
@@ -1957,6 +1981,8 @@ class KuruczGrid():
             iolines = io.StringIO('\n'.join(lines))
             if i==1:
                 model,header,labels,abu,tail = read_kurucz_model(iolines)
+                refmetal = marr[i-1]
+                refalpha = aarr[i-1]
             else:
                 model,h,t,ab,tl = read_kurucz_model(iolines)
             # Need to transpose the data, want [Ncols,Ntau]
@@ -2015,28 +2041,41 @@ class KuruczGrid():
         model[6,:] = modlist[0][6,0]
             
         # Editing the header
-        header[0] = utils.strput(header[0],'%7.0f' % teff,4)
-        header[0] = utils.strput(header[0],'%8.5f' % logg,21)        
-        tmpstr1 = header[1]
-        tmpstr2 = header[4]
-        if (metal < 0.0):
-            if type == 'old':
-                header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),18)
-            else:
-                header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),8)
-            header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)
-        else:
-            if type == 'old':
-                header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),18)
-            else:
-                header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),8)
-                header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)            
-        header[22] = utils.strput(header[22],'%2i' % ntau,11)
+        #header[0] = utils.strput(header[0],'%7.0f' % teff,4)
+        #header[0] = utils.strput(header[0],'%8.5f' % logg,21)        
+        #tmpstr1 = header[1]
+        #tmpstr2 = header[4]
+        #if (metal < 0.0):
+        #    if type == 'old':
+        #        header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),18)
+        #    else:
+        #        header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),8)
+        #    header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)
+        #else:
+        #    if type == 'old':
+        #        header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),18)
+        #    else:
+        #        header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),8)
+        #        header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)            
+        #header[22] = utils.strput(header[22],'%2i' % ntau,11)
 
+        import pdb; pdb.set_trace()
+
+
+        # Start with abundances of the reference model and modify as necessary (in N(X)/N(H))
+        oldabu = abu.copy()   # save
+        # Fix the metallicity and alpha abundance
+        abu[2:] = np.log10(abu[2:])       # switch to log temporarily
+        abu[2:] += metal-refmetal
+        for i in [8,10,12,14,16,18,20,22]:
+            abu[i-1] += alpha-refalpha
+        abu[2:] = 10**abu[2:]             # back to linear
+        newheader = make_kurucz_header([teff,logg,metal,alpha],ndepths=ntau,abu=abu)
+        
         # Now put it all together
         lines = []
-        for i in range(len(header)):
-            lines.append(header[i])
+        for i in range(len(newheader)):
+            lines.append(newheader[i])
         if type == 'old':
             for i in range(ntau):
                 lines.append('%15.8E %8.1f %9.3E %9.3E %9.3E %9.3E %9.3E' % tuple(model[:,i]))
