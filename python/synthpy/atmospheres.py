@@ -1712,6 +1712,10 @@ class MARCSAtmosphere(Atmosphere):
         
         # Radiation pressure, Prad = 1/3 * a * T^4  (10.19 in C+O)
         # a = radiation constant = 4sigma/c = 7.565767e-16 J/m3/K4
+
+        # kboltz_cgs = 1.380649e-16 # erg/K
+        # ne = Pe / (temp*kboltz_cgs)  # electron number density
+        # n = Pg / (temp*kboltz_cgs)   # non-electron number density
         
         import pdb; pdb.set_trace()
 
@@ -1947,7 +1951,6 @@ class KuruczGrid():
 
         # Now load all of the data
         modlist = []
-        trlist = []                
         for i in np.arange(npoints)+1:
             lines = lineslist[i-1]    
             # make io.StringIO object
@@ -1958,27 +1961,16 @@ class KuruczGrid():
                 model,h,t,ab,tl = read_kurucz_model(iolines)
             # Need to transpose the data, want [Ncols,Ntau]
             model = model.T
-            
-	    # Getting the tauross scale
-            rhox = model[0,:]
-            kappaross = model[4,:]
-            tauross = np.zeros(ntau,dtype=np.float64)
-            tauross[0] = rhox[0]*kappaross[0]
-            for ii in np.arange(ntau-1)+1:
-                tauross[ii] = utils.trapz(rhox[0:ii+1],kappaross[0:ii+1])
-
             modlist.append(model)
-            trlist.append(tauross)
 
         model = np.zeros((ncols,ntau),dtype=np.float64)  # cleaning up for re-using the matrix
 
-        # Defining the mass (RHOX#gr cm-2) sampling 
-        tauross = trlist[0]       # re-using the vector tauross
-        bot_tauross = min([t[ntau-1] for t in trlist])
-        top_tauross = max([t[0] for t in trlist])
-        g, = np.where((tauross >= top_tauross) & (tauross <= bot_tauross))
-        tauross_new = np.interp(np.linspace(0,1,ntau),np.linspace(0,1,len(g)),tauross[g])        
-    
+        # Defining the mass (RHOX#gr cm-2) sampling
+        # According to Castelli & Kurucz (2003) each model has the same number of 72 plane parallel layers
+        # from log tau ross = -6.875 to +2.00 at steps of log tau ross = 0.125
+        logtauross = np.arange(72)*0.125-6.875
+        tauross = 10**(logtauross)
+        
         # Let's interpolate for every depth
         points = (np.arange(2),np.arange(2),np.arange(2))
         if len(aind)==0:
@@ -1987,37 +1979,37 @@ class KuruczGrid():
             for j in range(ncols):
                 if j==6:   # can skip the vmicro column
                     continue
-                if len(aind)>0:
-                    grid[0,0,0] = np.interp(tauross_new[i],trlist[0][1:],modlist[0][j,1:])
-                    grid[0,0,1] = np.interp(tauross_new[i],trlist[1][1:],modlist[1][j,1:])
-                    grid[0,1,0] = np.interp(tauross_new[i],trlist[2][1:],modlist[2][j,1:])
-                    grid[0,1,1] = np.interp(tauross_new[i],trlist[3][1:],modlist[3][j,1:])
-                    grid[1,0,0] = np.interp(tauross_new[i],trlist[4][1:],modlist[4][j,1:])
-                    grid[1,0,1] = np.interp(tauross_new[i],trlist[5][1:],modlist[5][j,1:])
-                    grid[1,1,0] = np.interp(tauross_new[i],trlist[6][1:],modlist[6][j,1:])
-                    grid[1,1,1] = np.interp(tauross_new[i],trlist[7][1:],modlist[7][j,1:])
+                if npoints==8:
+                    grid[0,0,0] = modlist[0][j,i]
+                    grid[0,0,1] = modlist[1][j,i]
+                    grid[0,1,0] = modlist[2][j,i]
+                    grid[0,1,1] = modlist[3][j,i]
+                    grid[1,0,0] = modlist[4][j,i]
+                    grid[1,0,1] = modlist[5][j,i]
+                    grid[1,1,0] = modlist[6][j,i]
+                    grid[1,1,1] = modlist[7][j,i]
                     model[j,i] = interpn(points,grid[:,:,:],(mapteff,maplogg,mapmetal),method='linear')
                 else:
-                    grid[0,0,0,0] = np.interp(tauross_new[i],trlist[0][1:],modlist[0][j,1:])
-                    grid[0,0,1,0] = np.interp(tauross_new[i],trlist[1][1:],modlist[1][j,1:])
-                    grid[0,1,0,0] = np.interp(tauross_new[i],trlist[2][1:],modlist[2][j,1:])
-                    grid[0,1,1,0] = np.interp(tauross_new[i],trlist[3][1:],modlist[3][j,1:])
-                    grid[1,0,0,0] = np.interp(tauross_new[i],trlist[4][1:],modlist[4][j,1:])
-                    grid[1,0,1,0] = np.interp(tauross_new[i],trlist[5][1:],modlist[5][j,1:])
-                    grid[1,1,0,0] = np.interp(tauross_new[i],trlist[6][1:],modlist[6][j,1:])
-                    grid[1,1,1,0] = np.interp(tauross_new[i],trlist[7][1:],modlist[7][j,1:])
-                    grid[0,0,0,1] = np.interp(tauross_new[i],trlist[8][1:],modlist[8][j,1:])
-                    grid[0,0,1,1] = np.interp(tauross_new[i],trlist[9][1:],modlist[9][j,1:])
-                    grid[0,1,0,1] = np.interp(tauross_new[i],trlist[10][1:],modlist[10][j,1:])
-                    grid[0,1,1,1] = np.interp(tauross_new[i],trlist[11][1:],modlist[11][j,1:])
-                    grid[1,0,0,1] = np.interp(tauross_new[i],trlist[12][1:],modlist[12][j,1:])
-                    grid[1,0,1,1] = np.interp(tauross_new[i],trlist[13][1:],modlist[13][j,1:])
-                    grid[1,1,0,1] = np.interp(tauross_new[i],trlist[14][1:],modlist[14][j,1:])
-                    grid[1,1,1,1] = np.interp(tauross_new[i],trlist[15][1:],modlist[15][j,1:])
+                    grid[0,0,0,0] = modlist[0][j,i]
+                    grid[0,0,1,0] = modlist[1][j,i]
+                    grid[0,1,0,0] = modlist[2][j,i]
+                    grid[0,1,1,0] = modlist[3][j,i]
+                    grid[1,0,0,0] = modlist[4][j,i]
+                    grid[1,0,1,0] = modlist[5][j,i]
+                    grid[1,1,0,0] = modlist[6][j,i]
+                    grid[1,1,1,0] = modlist[7][j,i]
+                    grid[0,0,0,1] = modlist[8][j,i]
+                    grid[0,0,1,1] = modlist[9][j,i]
+                    grid[0,1,0,1] = modlist[10][j,i]
+                    grid[0,1,1,1] = modlist[11][j,i]
+                    grid[1,0,0,1] = modlist[12][j,i]
+                    grid[1,0,1,1] = modlist[13][j,i]
+                    grid[1,1,0,1] = modlist[14][j,i]
+                    grid[1,1,1,1] = modlist[15][j,i]
                     model[j,i] = interpn(points,grid[:,:,:,:],(mapteff,maplogg,mapmetal,mapalpha),method='linear')
 
-        for j in range(ncols):
-            model[j,0] = model[j,1]*0.999
+        #for j in range(ncols):
+        #    model[j,0] = model[j,1]*0.999
             
         # Vmicro
         model[6,:] = modlist[0][6,0]
@@ -2132,8 +2124,8 @@ class MARCSGrid():
         ncols = 14        
 
         # timing
-        #  without alpha it takes ~0.7 sec
-        #  with alpha it takes ~2.8 sec
+        #  without alpha it takes ~0.6 sec
+        #  with alpha it takes ~1 sec
         
         # Linear Interpolation
         tm1 = max(self.teff[np.where(self.teff <= teff)[0]])     # immediately inferior Teff
@@ -2236,7 +2228,6 @@ class MARCSGrid():
 
         # Now load all of the data
         modlist = []
-        trlist = []                
         for i in np.arange(npoints)+1:
             lines = lineslist[i-1]                
             # make io.StringIO object
@@ -2247,32 +2238,22 @@ class MARCSGrid():
                 model,h,t,ab,tl = read_marcs_model(iolines)
             # Need to transpose the data, want [Ncols,Ntau]
             model = model.T
-            
-	    # Getting the tauross scale
-            rhox = model[13,:]         # rhox
-            kappaross = model[8,:]     # kappaross
-            tauross = 10**model[0,:]      # log tau Ross
-            #tauross = np.zeros(ntau,dtype=np.float64)
-            #tauross[0] = rhox[0]*kappaross[0]
-            #for ii in np.arange(ntau-1)+1:
-            #    tauross[ii] = utils.trapz(rhox[0:ii+1],kappaross[0:ii+1])
-                
             modlist.append(model)
-            trlist.append(tauross)
+
 
         model = np.zeros((ncols,ntau),dtype=np.float64)  # cleaning up for re-using the matrix
 
 
-        # Defining the mass (RHOX#gr cm-2) sampling 
-        tauross = trlist[0]       # re-using the vector tauross
-        #bot_tauross = min([t[-1] for t in trlist])
-        #top_tauross = max([t[0] for t in trlist])
-        #g, = np.where((tauross >= top_tauross) & (tauross <= bot_tauross))
-        #tauross_new = np.interp(np.linspace(0,1,ntau),np.linspace(0,1,len(g)),tauross[g])
-        tauross_new = tauross
-        # log Tau Ross is always -5.00 to +2.00 in the MARCS atmospheres
+        # Defining the mass (RHOX#gr cm-2) sampling
+        # The tauross values are the same for all MARCS models
+        logtauross = np.array([-5. , -4.8, -4.6, -4.4, -4.2, -4. , -3.8, -3.6, -3.4, -3.2, -3. ,
+                               -2.9, -2.8, -2.7, -2.6, -2.5, -2.4, -2.3, -2.2, -2.1, -2. , -1.9,
+                               -1.8, -1.7, -1.6, -1.5, -1.4, -1.3, -1.2, -1.1, -1. , -0.9, -0.8,
+                               -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, -0. ,  0.1,  0.2,  0.3,
+                               0.4,  0.5,  0.6,  0.7,  0.8,  0.9,  1. ,  1.2,  1.4,  1.6,  1.8,
+                               2. ])
+        tauross = 10**logtauross
 
-        
         # Let's interpolate for every depth
         points = (np.arange(2),np.arange(2),np.arange(2))
         if npoints==16:
@@ -2309,7 +2290,7 @@ class MARCSGrid():
                     grid[1,1,0,1] = modlist[14][j,i]
                     grid[1,1,1,1] = modlist[15][j,i]
                     model[j,i] = interpn(points,grid[:,:,:,:],(mapteff,maplogg,mapmetal,mapalpha),method='linear')
-        model[0,:] = np.log10(tauross)
+        model[0,:] = logtauross
 
         # NOTE: The partial pressures are NOT interpolated
             
