@@ -9,31 +9,33 @@ from dlnpyutils import utils as dln
 from . import utils
 
 # Dictionary to convert from atomic number to the element short name
-num2name = {1:'H',2:'HE',3:'LI',4:'BE',5:'B ',6:'C ',7:'N ',8:'O ',9:'F ',10:'NE',
-            11:'NA',12:'MG',13:'AL',14:'SI',15:'P ',16:'S ',17:'CL',18:'AR',19:'K ',20:'CA',
-            21:'SC',22:'TI',23:'V ',24:'CR',25:'MN',26:'FE',27:'CO',28:'NI',29:'CU',30:'ZN',
-            31:'GA',32:'GE',33:'AS',34:'SE',35:'BR',36:'KR',37:'RB',38:'SR',39:'Y ',40:'ZR',
-            41:'NB',42:'MO',43:'TC',44:'RU',45:'RH',46:'PD',47:'AG',48:'CD',49:'IN',50:'SN',
-            51:'SB',52:'TE',53:'I ',54:'XE',55:'CS',56:'BA',57:'LA',58:'CE',59:'PR',60:'ND',
-            61:'PM',62:'SM',63:'EU',64:'GD',65:'TB',66:'DY',67:'HO',68:'ER',69:'TM',70:'YB',
-            71:'LU',72:'HF',73:'TA',74:'W ',75:'RE',76:'OS',77:'IR',78:'PT',79:'AU',80:'HG',
-            81:'TL',82:'PB',83:'BI',84:'PO',85:'AT',86:'RN',87:'FR',88:'RA',89:'AC',90:'TH',
-            91:'PA',92:'U ',93:'NP',94:'PU',95:'AM',96:'CM',97:'BK',98:'CF',99:'ES',
-            101:'HH',106:'CH',108:'OH',114:'SIH',606:'CC',607:'CN',608:'CO',808:'OO',822:'TIO',126:'FEH'}
+num2namedict = {1:'H',2:'HE',3:'LI',4:'BE',5:'B ',6:'C ',7:'N ',8:'O ',9:'F ',10:'NE',
+                11:'NA',12:'MG',13:'AL',14:'SI',15:'P ',16:'S ',17:'CL',18:'AR',19:'K ',20:'CA',
+                21:'SC',22:'TI',23:'V ',24:'CR',25:'MN',26:'FE',27:'CO',28:'NI',29:'CU',30:'ZN',
+                31:'GA',32:'GE',33:'AS',34:'SE',35:'BR',36:'KR',37:'RB',38:'SR',39:'Y ',40:'ZR',
+                41:'NB',42:'MO',43:'TC',44:'RU',45:'RH',46:'PD',47:'AG',48:'CD',49:'IN',50:'SN',
+                51:'SB',52:'TE',53:'I ',54:'XE',55:'CS',56:'BA',57:'LA',58:'CE',59:'PR',60:'ND',
+                61:'PM',62:'SM',63:'EU',64:'GD',65:'TB',66:'DY',67:'HO',68:'ER',69:'TM',70:'YB',
+                71:'LU',72:'HF',73:'TA',74:'W ',75:'RE',76:'OS',77:'IR',78:'PT',79:'AU',80:'HG',
+                81:'TL',82:'PB',83:'BI',84:'PO',85:'AT',86:'RN',87:'FR',88:'RA',89:'AC',90:'TH',
+                91:'PA',92:'U ',93:'NP',94:'PU',95:'AM',96:'CM',97:'BK',98:'CF',99:'ES',
+                101:'HH',106:'CH',107:'NH',108:'OH',111:'NAH',112:'MGH',114:'SIH',120:'CAH',
+                606:'CC',607:'CN',608:'CO',808:'OO',814:'SIO',822:'TIO',823:'VO',126:'FEH',10108:'H2O'}
 # Dictionary to convert from element name to the atomic number
-name2num = {'H':1,'He':2,'Li':3,'Be':4,'B':5,'C':6,'N':7,'O':8,'F':9,'Ne':10,
-            'Na':11,'Mg':12,'Al':13,'Si':14,'P':15,'S':16,'Cl':17,'Ar':18,'K':19,'Ca':20,
-            'Sc':21,'Ti':22,'V':23,'Cr':24,'Mn':25,'Fe':26,'Co':27,'Ni':28,'Cu':29,'Zn':30,
-            'Ga':31,'Ge':32,'As':33,'Se':34,'Br':35,'Kr':36,'Rb':37,'Sr':38,'Y':39,'Zr':40,
-            'Nb':41,'Mo':42,'Tc':43,'Ru':44,'Rh':45,'Pd':46,'Ag':47,'Cd':48,'In':49,'Sn':50,
-            'Sb':51,'Te':52,'I':53,'Xe':54,'Cs':55,'Ba':56,'La':57,'Ce':58,'Pr':59,'Nd':60,
-            'Pm':61,'Sm':62,'Eu':63,'Gd':64,'Tb':65,'Dy':66,'Ho':67,'Er':68,'Tm':69,'Yb':70,
-            'Lu':71,'Hf':72,'Ta':73,'W':74,'Re':75,'Os':76,'Ir':77,'Pt':78,'Au':79,'Hg':80,
-            'Tl':81,'Pb':82,'Bi':83,'Po':84,'At':85,'Rn':86,'Fr':87,'Ra':88,'Ac':89,'Th':90,
-            'Pa':91,'U':92,'Np':93,'Pu':94,'Am':95,'Cm':96,'Bk':97,'Cf':98,'Es':99,
-            'HH':101,'CH':106,'OH':108,'SiH':114,'CC':606,'CN':607,'CO':608,'OO':808,'TiO':822,'FeH':126}
+name2numdict = {'H':1,'He':2,'Li':3,'Be':4,'B':5,'C':6,'N':7,'O':8,'F':9,'Ne':10,
+                'Na':11,'Mg':12,'Al':13,'Si':14,'P':15,'S':16,'Cl':17,'Ar':18,'K':19,'Ca':20,
+                'Sc':21,'Ti':22,'V':23,'Cr':24,'Mn':25,'Fe':26,'Co':27,'Ni':28,'Cu':29,'Zn':30,
+                'Ga':31,'Ge':32,'As':33,'Se':34,'Br':35,'Kr':36,'Rb':37,'Sr':38,'Y':39,'Zr':40,
+                'Nb':41,'Mo':42,'Tc':43,'Ru':44,'Rh':45,'Pd':46,'Ag':47,'Cd':48,'In':49,'Sn':50,
+                'Sb':51,'Te':52,'I':53,'Xe':54,'Cs':55,'Ba':56,'La':57,'Ce':58,'Pr':59,'Nd':60,
+                'Pm':61,'Sm':62,'Eu':63,'Gd':64,'Tb':65,'Dy':66,'Ho':67,'Er':68,'Tm':69,'Yb':70,
+                'Lu':71,'Hf':72,'Ta':73,'W':74,'Re':75,'Os':76,'Ir':77,'Pt':78,'Au':79,'Hg':80,
+                'Tl':81,'Pb':82,'Bi':83,'Po':84,'At':85,'Rn':86,'Fr':87,'Ra':88,'Ac':89,'Th':90,
+                'Pa':91,'U':92,'Np':93,'Pu':94,'Am':95,'Cm':96,'Bk':97,'Cf':98,'Es':99,
+                'HH':101,'CH':106,'NH':107,'OH':108,'NAH':111,'MGH':112,'SIH':114,'CAH':120,
+                'CC':606,'CN':607,'CO':608,'OO':808,'SIO':814,'TIO':822,'VO':823,'FeH':126}
 # Same as name2num but using all CAPS names
-name2numCAPS = dict((k.upper(), v) for k, v in name2num.items())
+name2numdictCAPS = dict((k.upper(), v) for k, v in name2numdict.items())
 # most common isotope
 # from https://www.britannica.com/science/isotope
 num2iso = {1:1,2:4,3:7,4:9,5:11,6:12,7:14,8:16,9:19,10:20,11:23,12:24,13:27,14:28,15:31,
@@ -51,6 +53,22 @@ aspcap_molidconvert = {'108.16':'108.001016','101.01':'101.001001','101.11':'101
                        '608.17':'608.012017','608.18':'608.012018','126.56':'126.001056'}
 # Inverse of aspcap_molidvert
 aspcap_molidinvert = {v: k for k, v in aspcap_molidconvert.items()}
+
+# Dissociation energy for molecules (in eV), MOOG uses this for molecules
+# these values are from the linemake/mooglists/ files
+molec_dissoc_energy = {10108:5.168,   # H2O
+                         822:6.870,   # TiO
+                         607:7.724,   # CN
+                         126:1.56,    # FeH
+                         608:11.092,  # CO
+                         101:4.478,   # H2
+                         606:6.24,    # C2
+                         108:4.391,   # OH
+                         109:5.869,   # HF
+                         114:3.190,   # SiH
+                         117:4.434,   # HCl
+                         814:8.260}   # SiO
+                         
 
 # Molecular ID formats
 # MOOG: 114.00128, 822.01646
@@ -99,22 +117,22 @@ msynspec_parser = lambda l: tuple((l[0:10].strip(),l[10:20].strip(),l[20:27].str
 
 
 # first type of turbospectrum formats
-aturbo1_parser = lambda l: turple((l[0:10].split(),l[12:18].split(),l[20:27].split(),l[29:34].split(),
-                                   l[36:42].split(),l[44:53].split(),l[55:61].split(),l[67:68].split(),
-                                   l[74:75].split(),l[77:81].split(),l[83:87].split()))
-mturbo1_parser = lambda l: tuple((l[0:10].split(),l[12:18].split(),l[20:27].split(),l[29:34].split(),
-                                  l[36:42].split(),l[44:53].split(),l[55:61].split(),l[67:68].split(),
-                                  l[74:75].split(),l[77:81].split(),l[83:87].split()))
+aturbo1_parser = lambda l: turple((l[0:10].strip(),l[12:18].strip(),l[20:27].strip(),l[29:34].strip(),
+                                   l[36:42].strip(),l[44:53].strip(),l[55:61].strip(),l[67:68].strip(),
+                                   l[74:75].strip(),l[77:81].strip(),l[83:87].strip()))
+mturbo1_parser = lambda l: tuple((l[0:10].strip(),l[12:18].strip(),l[20:27].strip(),l[29:34].strip(),
+                                  l[36:42].strip(),l[44:53].strip(),l[55:61].strip(),l[67:68].strip(),
+                                  l[74:75].strip(),l[77:81].strip(),l[83:87].strip()))
 
 # second type of turbospectrum formats
-mturbo2_parser = lambda l: tuple((l[0:10].split(),l[12:18].split(),l[20:27].split(),l[29:38].split(),
-                                  l[40:46].split(),l[48:57].split(),l[61:62].split(),l[68:69].split(),
-                                  l[73:76].split(),l[78:81].split(),l[85:91].split(),l[93:104].split(),
-                                  l[106:117].split()))
-aturbo2_parser = lambda l: tuple((l[0:10].split(),l[12:18].split(),l[20:27].split(),l[29:38].split(),
-                                  l[40:46].split(),l[48:57].split(),l[59:65].split(),l[69:70].split(),
-                                  l[76:77].split(),l[81:84].split(),l[86:89].split(),l[93:99].split(),
-                                  l[101:112].split(),l[114:125].split()))
+mturbo2_parser = lambda l: tuple((l[0:10].strip(),l[12:18].strip(),l[20:27].strip(),l[29:38].strip(),
+                                  l[40:46].strip(),l[48:57].strip(),l[61:62].strip(),l[68:69].strip(),
+                                  l[73:76].strip(),l[78:81].strip(),l[85:91].strip(),l[93:104].strip(),
+                                  l[106:117].strip()))
+aturbo2_parser = lambda l: tuple((l[0:10].strip(),l[12:18].strip(),l[20:27].strip(),l[29:38].strip(),
+                                  l[40:46].strip(),l[48:57].strip(),l[59:65].strip(),l[69:70].strip(),
+                                  l[76:77].strip(),l[81:84].strip(),l[86:89].strip(),l[93:99].strip(),
+                                  l[101:112].strip(),l[114:125].strip()))
 
 
 #fmtarr = []
@@ -196,6 +214,26 @@ def toint(val,unit=None):
         else:
             return int(val)*unit            
 
+def num2name(anum):
+    """ Convert atom, molecular specid number to letter code."""
+    # Use the dictionary when possible
+    if anum in num2namedict:
+        return num2namedict[anum]
+    # Figure out the name
+    num = str(anum)
+    if len(num) % 2 == 1: num='0'+num
+    natom = len(num)//2
+    # Get the characters for each atom
+    numarr = []
+    symarr = []
+    for i in range(natom):
+        num1 = int(num[i*2:i*2+2])
+        numarr.append(num1)
+        symarr.append(num2namedict[num1])
+    # Most massive atom is last in the list, but first in the character string
+    name = ''.join(symarr[::-1])
+    return name    
+        
 def wave_units(lenunit,air):
     """ Define new wavelength units that includes air/vac information."""
     if air:
@@ -322,22 +360,12 @@ def turbospecid(specid):
     if anum<100:
         newid = '{:7.4f}  '.format(int(fspecid))
         ion = int( (fspecid - anum) * 1000 + 1 )
-        name = num2name[anum]+' '+utils.toroman(ion)  # Convert to Roman number
+        name += num2name(anum)+' '+utils.toroman(ion)  # Convert to Roman number
     # molecular
     else:
-        # Convert from Kurucz to Turbospectrum molecular ID format
-        # Kurucz: integer is the two elements, decimal is 
-        # Turbospectrum: integer is the two elements, decimal is the two isotopes
-        # 108.16 -> 108.001016
-        # 606.12 -> 606.012012
-        # ASPCAP linelist turbospec.20180901t20.molec
-        #'0607.012014 '            1      5591
-        #'Sneden web '
-        anum1 = int(fspecid/100)
-        anum2 = anum-100*anum1
-        #newid = '{0:04d}.{1:03d}{2:03d}'.format(anum,anum1,int(decimal))
-        newid = '{0:04d}.{1:s}'.format(anum,decimal)
-        name = num2name[anum].upper()
+        # The standard specid format for molecular is already in the Turbospectrum format
+        newid = specid
+        name = num2name(anum).upper()
         ion = 1   # output ion value is always 1 in the Turbospectrum header line for molecules
     return newid,name,ion
     
@@ -408,14 +436,14 @@ def convertto(info,outtype):
         # Atomic line, 'H 1', 'Li 2'
         if int(num)<100:
             # change atomic specid, 3.000 -> 'Li 1'
-            name = num2name[int(num)]
+            name = num2name(int(num))
             newid = name+' '+str(int(decimal)+1)
         # Molecule, 'OH', 'CN'
         else:
             # I'M NOT SURE WHAT THE VALD MOLECULAR FORMAT IS
             print('UNCLEAR WHAT THE VALD MOLECULAR FORMAT IS')
             import pdb; pdb.set_trace()
-            num = name2num[name]
+            num = name2numdict[name]
             newid = '{0:02d}.{1:02d}'.format(num,ionint)
         info['id'] = newid
     # -- Kurucz --
@@ -604,14 +632,14 @@ def convertfrom(info,intype):
         name,ion = specid.split()
         # Atomic line, 'H 1', 'Li 2'
         if len(name)==1 or name[1].islower():
-            num = name2num[name]
+            num = name2numdict[name]
             newid = '{0:02d}.{1:03d}'.format(num,int(ion)-1)
         # Molecule, 'OH', 'CN'
         else:
             # I'M NOT SURE WHAT THE VALD MOLECULAR FORMAT IS
             print('UNCLEAR WHAT THE VALD MOLECULAR FORMAT IS')
             import pdb; pdb.set_trace()
-            num = name2num[name]
+            num = name2numdict[name]
             newid = '{0:02d}.{1:02d}'.format(num,ionint)
         info['id'] = newid            
     # -- Kurucz --
@@ -724,10 +752,10 @@ def convertfrom(info,intype):
         namearr = info['name'].split()
         if len(namearr)==2:
             atom,ion = namearr
-            newid = str(name2numCAPS[atom.upper()])+'.'+str(utils.fromroman(ion)-1)
+            newid = str(name2numdictCAPS[atom.upper()])+'.'+str(utils.fromroman(ion)-1)
             info['id'] = newid
         else:
-            num = str(name2numCAPS[name.upper()])
+            num = str(name2numdictCAPS[name.upper()])
             newid = num+'.'
             if len(num) % 2 == 1: num='0'+num
             natom = len(num)//2
@@ -1431,64 +1459,126 @@ def reader_synspec(line):
     #C     GS and GW in NEW, and slightly different format of reading.
     #C
     #
-    #Looks like it is whitespace delimited, not fixed format
-    #
-    #example from gfallx3_bpo.19
-    #   510.6254  28.01 -1.049  116167.760   1.5  135746.130   1.5   9.03  -5.45  -7.65 0  4  3  0 -1 -1 -1
-    #   510.6254  27.01 -4.201   91425.120   2.0   71846.750   2.0   9.09  -5.82  -7.76 0  5  1 -1  3  1 -1
-    #   510.6270  10.01 -1.820  301855.710   2.5  321434.020   1.5   0.00   0.00   0.00 0  4  2  0 -1 -1 -1
-    #   510.6330  17.01 -1.160  158178.780   1.0  177756.860   1.0   0.00   0.00   0.00 0  3  0  0  3  1  1
-    #   510.6333  24.01 -3.520   89056.020   2.5   69477.950   2.5   8.96  -5.73  -7.71 0  4  4 -1  4  3  0
-    #   510.6455  26.02 -3.495  117950.320   4.0  137527.920   4.0   9.00  -6.67  -7.96 0  1  4  0  3  5  0
-    #   510.6458  26.00 -2.560   56735.154   1.0   37157.564   2.0   8.25  -4.61  -7.45 0  5  2  0  5  1 -1
-    #
+    # Looks like it is whitespace delimited, not fixed format
 
-
-    #     9.6490  14.05-10.228    5090.000   0.5 1041472.000   1.5  10.51  -7.11  -8.18 0  2  1  0  2  2  0
-    #     9.6495  14.05 -9.827    5090.000   0.5 1041416.000   2.5  10.51  -7.11  -8.18 0  2  1  0  2  2  0
-
+    # INLIN_grid is the actual function that reads in the list
     
     arr = line.split()
+    narr = len(arr)
+
+    # Default values
+    ep = None
+    EP1 = None
+    J1 = None
+    EP2 = None
+    J2 = None
+    rad = None
+    stark = None
+    vdW = None
     
-    # ATOMIC LINE
-    if len(arr)>7:
-        # Make sure it's the right length
-        nline = len(line)
-        if nline<102:
-            line += (102-nline)*' '
-        arr = asynspec_parser(line)
-        
-        # INLIN_grid is the actual function that reads in the list
-        lam = tofloat(arr[0],u.nm)        # wavelength in nm
-        specid = arr[1]
-        loggf = tofloat(arr[2])
+    # Carlos' list2bin.f fortran code has 5 different formats
+    # 1) 10 real values, 7 integer values (17 total)
+    # 2) 10 real values, 1 integer value  (11 total)
+    # 3) 9 real values, 0 integer values  (9 total)
+    # 4) 7 real values, 0 integer values  (7 total)
+    # 5) 4 real values, 0 integer values  (4 total)
+    # Fortran's READ automaticaly recognizes spaces, commas and tabs as delimiters
+
+    # The first three columns are always the same
+    lam = tofloat(arr[0],u.nm)        # wavelength in nm
+    specid = arr[1]
+    num,decimal = specid.split('.')
+    if int(num)>99:
+        molec = True
+    else:
+        molec = False
+    loggf = tofloat(arr[2])
+    
+    # 1) 17 total values (10 real, 7 integer), ATOMIC
+    if narr==17:
+        # Example from gfallx3_bpo.19
+        #   510.6254  28.01 -1.049  116167.760   1.5  135746.130   1.5   9.03  -5.45  -7.65 0  4  3  0 -1 -1 -1
+        #   510.6254  27.01 -4.201   91425.120   2.0   71846.750   2.0   9.09  -5.82  -7.76 0  5  1 -1  3  1 -1
+        #   510.6270  10.01 -1.820  301855.710   2.5  321434.020   1.5   0.00   0.00   0.00 0  4  2  0 -1 -1 -1
+        # Example from gfATO.19
+        #     1.8348   8.05 -6.079       0.000   0.5 5450280.000   0.5  10.81  -6.15  -8.06 0  2  0  0  4  2  0
+        #     1.8348   8.05 -5.951       0.000   0.5 5450280.000   1.5  10.81  -6.15  -8.05 0  2  0  0  4  2  0
+        #     1.9008   8.05 -8.163       0.000   0.5 5260970.000   0.5  11.02  -6.90  -8.29 0  2  0  0  4  1  0
         EP1 = tofloat(arr[3],(1/u.cm))    # first energy level in cm-1
         J1 = tofloat(arr[4])
         EP2 = tofloat(arr[5],(1/u.cm))    # second energy level in cm-1
         J2 = tofloat(arr[6])
         rad = tofloat(arr[7])             # gam, radiation damping constant
         stark = tofloat(arr[8])
-        vdW = tofloat(arr[9])    
+        vdW = tofloat(arr[9])
+        #C    INEXT   = 0  - no other record necessary for a given line
+        #C            > 0  - a second record is present, see below
+        inext = toint(arr[10])        
+        #C    ISQL   >= 0  - value for the spin quantum number (2S+1) of lower level
+        #C            < 0  - value for the spin number of the lower level unknown
+        #C    ILQL   >= 0  - value for the L quantum number of lower level
+        #C            < 0  - value for L of the lower level unknown
+        #C    IPQL   >= 0  - value for the parity of lower level
+        #C            < 0  - value for the parity of the lower level unknown
+        #C    ISQU   >= 0  - value for the spin quantum number (2S+1) of upper level
+        #C            < 0  - value for the spin number of the upper level unknown
+        #C    ILQU   >= 0  - value for the L quantum number of upper level
+        #C            < 0  - value for L of the upper level unknown
+        #C    IPQU   >= 0  - value for the parity of upper level
+        #C            < 0  - value for the parity of the upper level unknown
+        isql = toint(arr[11])
+        ilql = toint(arr[12])
+        ipql = toint(arr[13])
+        isqu = toint(arr[14])
+        ilqu = toint(arr[15])
+        ipqu = toint(arr[16])        
+        
+    # 2) 11 total vlues (10 real, 1 integer), ATOMIC
+    elif narr==11:
+        #     1.8348   8.05 -6.079       0.000   0.5 5450280.000   0.5  10.81  -6.15  -8.06 0
+        #     1.8348   8.05 -5.951       0.000   0.5 5450280.000   1.5  10.81  -6.15  -8.05 0
+        #     1.9008   8.05 -8.163       0.000   0.5 5260970.000   0.5  11.02  -6.90  -8.29 0
+        # Make sure it's the right length
+        #nline = len(line)
+        #if nline<102:
+        #    line += (102-nline)*' '
+        #arr = asynspec_parser(line)
+        EP1 = tofloat(arr[3],(1/u.cm))    # first energy level in cm-1
+        J1 = tofloat(arr[4])
+        EP2 = tofloat(arr[5],(1/u.cm))    # second energy level in cm-1
+        J2 = tofloat(arr[6])
+        rad = tofloat(arr[7])             # gam, radiation damping constant
+        stark = tofloat(arr[8])
+        vdW = tofloat(arr[9])
+        inext = toint(arr[10])
+        
+    # 3) 9 total values (9 real, 0 integer), MOLECULAR
+    elif narr==9:
+        # Example from H2O-8.20
+        #  716.6172  10108.00  -7.529    1079.079  1.60E+07 0.0469 0.336 0.0128 0.191    
+        #  716.6327  10108.00  -7.329    2042.310  1.60E+07 0.0365 0.273 0.0098 0.176
+        # alam,anum,gf,excl,gr,gh2,xnh2,ghe,xnhe
+        ep = tofloat(arr[3],(1/u.cm))    # excitation potential of the lower level (in cm-1)
+        rad = tofloat(arr[4])
+        gh2 = tofloat(arr[5])    # gh2
+        xnh2 = tofloat(arr[6])   # xnh2
+        ghe = tofloat(arr[7])    # ghe
+        xnhe = tofloat(arr[8])   # xnhe
 
-        info = OrderedDict()  # start dictionary        
-        info['id'] = specid
-        info['lambda'] = lam
-        info['loggf'] = loggf
-        info['EP1'] = EP1
-        info['J1'] = J1
-        info['EP2'] = EP2
-        info['J2'] = J2
-        info['ep'] = None  # for consistency with molecular format
-        info['rad'] = rad
-        info['stark'] = stark
-        info['vdW'] = vdW
-        info['airwave'] = True   # air wavelengths
-        info['type'] = 'synspec'
-        info['molec'] = False
-        return info
+        #  gvdwh2(il,ilist)=real(gh2)
+        #  gexph2(il,ilist)=real(xnh2)
+        #  gvdwhe(il,ilist)=real(ghe)
+        #  gexphe(il,ilist)=real(xnhe)
 
-    # MOLECULAR LINE
-    else:
+        # function gvdw()
+        # evaluation of the Van der Waals broadening parameter
+        # EXOMOL form - broadening by H2 and He
+        # gvdwh2, gexph2, gvdwh2, gexph2 are used here!
+        # gvdw=con*t*((296./t)**gexph2(il,ilist)*gvdwh2(il,ilist)*anh2(id)+
+        # *            (296./t)**gexphe(il,ilist)*gvdwhe(il,ilist)*anhe)
+        
+    # 4) 7 total values (7 real, 0 integer), MOLECULAR
+    elif narr==7:
         # INMOLI reads in the molecular linelist
         #C    ALAM    - wavelength (in nm)
         #C    ANUM    - code of the modelcule (as in Kurucz)
@@ -1498,60 +1588,61 @@ def reader_synspec(line):
         #C    GR      - gamma(rad)
         #C    GS      - gamma(Stark)
         #C    GW      - gamma(VdW)
-    
-        #example from kmol3_0.01_30.20 
+
+        # Example from kmol3_0.01_30.20 
         #  596.0711    606.00 -6.501    6330.189  0.63E+08  0.31E-04  0.10E-06
         #  596.0715    606.00 -3.777   11460.560  0.63E+08  0.31E-04  0.10E-06
         #  596.0719    108.00-11.305    9202.943  0.63E+05  0.30E-07  0.10E-07
         #  596.0728    606.00 -2.056   35538.333  0.63E+08  0.31E-04  0.10E-06
         #  596.0729    606.00 -3.076   29190.339  0.63E+08  0.31E-04  0.10E-06
         #  596.0731    607.00 -5.860   20359.831  0.63E+08  0.31E-04  0.10E-06
-
-        if len(arr)>4:
-            # Make sure it's the right length
-            nline = len(line)
-            if nline<69:
-                line += (69-nline)*' '
-            arr = msynspec_parser(line)
-
-            lam = tofloat(arr[0],u.nm)       # wavelength in nm
-            specid = arr[1]
-            loggf = tofloat(arr[2])
-            ep = tofloat(arr[3],(1/u.cm))    # excitation potential of the lower level (in cm-1)
-            gamrad = tofloat(arr[4])
-            stark = tofloat(arr[5])
-            vdW = tofloat(arr[6])    
-
-        # Only first 4 columns
-        #  slightly different format
-        else:
-            #   84.4941    101.00  -3.854       0.000'
-            # 40 characters
-            lam = tofloat(arr[0],u.nm)       # wavelength in nm
-            specid = arr[1]
-            loggf = tofloat(arr[2])
-            ep = tofloat(arr[3],(1/u.cm))    # excitation potential of the lower level (in cm-1)
-            gamrad = None
-            stark = None
-            vdW = None
         
-        info = OrderedDict()
-        info['id'] = specid
-        info['lambda'] = lam
-        info['loggf'] = loggf
-        # fill in blank values that the atomic version return        
-        info['EP1'] = None
-        info['J1'] = None
-        info['EP2'] = None
-        info['J2'] = None
-        info['ep'] = ep
-        info['rad'] = gamrad
-        info['stark'] = stark
-        info['vdW'] = vdW
-        info['airwave'] = True   # air wavelengths
-        info['type'] = 'synspec'
-        info['molec'] = True
-        return info
+        # Make sure it's the right length
+        #nline = len(line)
+        #if nline<69:
+        #    line += (69-nline)*' '
+        #arr = msynspec_parser(line)
+        ep = tofloat(arr[3],(1/u.cm))    # excitation potential of the lower level (in cm-1)
+        rad = tofloat(arr[4])
+        stark = tofloat(arr[5])
+        vdW = tofloat(arr[6])
+        
+    # 5) 4 total values (4 real, 0 integer), MOLECULAR
+    elif narr==4:
+        # Example from gfMOLsun.20
+        #   84.4941    101.00  -3.854       0.000 
+        #   84.5005    101.00  -5.507       0.000 
+        #   84.5591    101.00  -3.201     118.489 
+        #   84.5607    101.00  -4.665       0.000 
+        # 40 characters
+        # lambda, specid, loggf, ep
+        ep = tofloat(arr[3],(1/u.cm))    # excitation potential of the lower level (in cm-1)
+
+        # Synspec uses "classical" broadening values for GAMRAD, GAMSTARK and GAMVDW
+        # gr = 2.4e13/alam**2   # rad
+        # gs = gsstd            # stark
+        # gw = gwstd            # vdW
+        
+    else:
+        raise Exception('Number of Synspec lines not supported.  Should be 17, 11, 9, 7, or 4')
+    
+    info = OrderedDict()  # start dictionary        
+    info['id'] = specid
+    info['lambda'] = lam
+    info['loggf'] = loggf
+    info['EP1'] = EP1
+    info['J1'] = J1
+    info['EP2'] = EP2
+    info['J2'] = J2
+    info['ep'] = ep  # for consistency with molecular format
+    info['rad'] = rad
+    info['stark'] = stark
+    info['vdW'] = vdW
+    info['airwave'] = True   # air wavelengths
+    info['type'] = 'synspec'
+    info['molec'] = molec
+        
+    return info
     
 
 def reader_turbo(line):
@@ -1575,6 +1666,64 @@ def reader_turbo(line):
     info = reader_turbo(line)
 
     """
+
+    # col 1: lambda(A)  
+    # col 2: Elow(eV) 
+    # col 3: loggf 
+    # col 4: fdamp (see below)
+    # col 5: gup
+    # col 6: gamma_rad (if =0, gf-value is used to compute gamma_rad)
+    # col 7: gamma_Stark (may be omitted)
+    # col 8: s,p,d,f etc for upper level (or X), see fdamp
+    # col 9: same for lower level
+    # col 10: equivalent width, when needed (abundance determination in eqwidt run)
+    # col 11: error in eqw
+    # col 12: (in quotes) some text describing levels or whatever you like to include
+    # The following columns are only used in NLTE run:
+    # col 13: lower level number in NLTE model atom
+    # col 14: same for upper level
+    # col 15: lower level id
+    # col 16: same for upper level
+    
+    # from bsyn.f
+
+    # XLB= wavelength in Angstroem
+    # CHIE= excitation pot (in eV) of lower level
+    # GFELOG= log(gf)
+    # GU the upper statistical weight for the line, is only of
+    #    importance for damping and if raddmp is not 0.
+    # FDAMP  is a fudge factor to increase damping constant
+    # RADDMP externaly calculated radiation damping (if needed)
+    # f = f-value (as g=1., f is in fact gf-value).
+
+    # New, Stark, NLTE (16 values)
+    #   xlb,chie,gfelog,fdamp,gu,raddmp,gamst,levlo,levup,eqw,eqwerr,
+    #   comment_line,ilevlo,ilevup,idlevlo,idlevup
+
+    # New, Stark, no-NLTE (9 values)
+    #   xlb,chie,gfelog,fdamp,gu,raddmp,gamst,levlo,levup    
+
+    # New, NO Stark, NLTE (15 values)
+    #   xlb,chie,gfelog,fdamp,gu,raddmp,levlo,levup,eqw,eqwerr,
+    #   comment_line,ilevlo,ilevup,idlevlo,idlevup
+
+    # New, NO Stark, no NLTE (or molecular) (8 values)
+    #   xlb,chie,gfelog,fdamp,gu,raddmp,levlo,levup
+
+    # Old format, molecular linelist (6 values)
+    #   xlb,chie,gfelog,fdamp,gu,raddmp
+    #    uses gamst=0.0
+
+    # How is GU used?  It seems like GU is only used if RADDMP==0
+    #        if (RADDMP.NE.0.) then
+    #*         Use radiative damping data in line list if available
+    #          GAMRAD=RADDMP
+    #        else
+    #*         default recipe for radiative damping
+    #          GAMRAD=6.669E15*G*F/(GU*XLB**2)
+    #        endif
+
+    
 
     # species,ion,nline
 
@@ -1657,17 +1806,18 @@ def reader_turbo(line):
     tickpos = line.find("'")
     # some molecular linelists only have the first six columns and no ticks at all
     
+    
     if tickpos==57 or (tickpos==-1 and len(line)<55):
         # probably only first six columns
         if tickpos==-1:
             #fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F5.2,1X,F6.1,1X,E9.2,1X,A6,3X,A1,3X,A1,1X,A4,1X,A4)'
             #out = utils.fread(line,fmt)
-            out = aturbo1_reader(line)
+            out = aturbo1_parser(line)
         # normal molecular format
         else:
             #fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F5.2,1X,F6.1,1X,E9.2,1X,F6.3,3X,A1,3X,A1,1X,F4.1,1X,F4.1)'
             #out = utils.fread(line,fmt)    
-            out = mturbo2_reader(line)
+            out = mturbo1_parser(line)
             
         lam = tofloat(out[0],u.AA)      # wavelength in Ang
         ep = tofloat(out[1],u.eV)      # excitation potential in eV, of the lower level
@@ -1811,8 +1961,9 @@ def writer_moog(info,freeform=True):
     # 6299.691  607.0  0.23   4.34E-3   0. 0.  7.65        12Q2314,0
     # 6300.265  607.0  1.28   5.78E-3   0. 0.  7.65        12R11410,5
     # 6300.310  8.0    0.00   1.78E-10  0. 0.  0.
-        
+
     specid = info['id']
+    num,decimal = specid.split('.')
     lam = info['lambda']      # wavelength in Ang
     loggf = info['loggf']
     hyp = info.get('hyp')
@@ -1840,11 +1991,14 @@ def writer_moog(info,freeform=True):
     else:
         ep = ep.value
     vdW = info.get('vdW')
-    if vdW is None:
+    if vdW is None or np.ma.is_masked(vdW):
         vdW = 0.0
     dis = info.get('dis')
-    if dis is None:
-        dis = 0.0
+    if dis is None or np.ma.is_masked(dis):
+        # Dissociation energy for molecules (in eV)
+        dis = molec_dissoc_energy.get(int(num))
+        if dis is None:
+            dis = 0.0
         
     # Wavelength in A
     # line designation
@@ -1853,7 +2007,15 @@ def writer_moog(info,freeform=True):
     # van der Waals damping parameter
     # dissociation energy (in eV) for molecules
     # equivalent width in mA
-        
+
+    #  2043.203 108.00116     0.095    -7.793               4.391
+    #  2044.611 108.00116     0.053    -7.732               4.391
+    #  2044.949 108.00116     0.044    -7.837               4.391
+
+    #  7164.959     010108.0      0.220     -7.369                 5.168
+    #  7165.270     010108.0      0.189     -7.399                 5.168
+    #  7165.850     010108.0      0.160     -7.402                 5.168
+    
     # lambda, specid, ep, loggf, vdW, dissociation energy
     # Formatted write
     if freeform==False:
@@ -1861,7 +2023,7 @@ def writer_moog(info,freeform=True):
     else:
         fmt = "{0:10.3f} {1:>12s} {2:10.3f} {3:10.3f} {4:10.3f} {5:10.3f}\n"
     line = fmt.format(lam.value,specid,ep,loggf,vdW,dis)
-
+    
     return line
 
 def writer_vald(info):
@@ -2415,7 +2577,7 @@ def writer_synspec(info):
         
     # For molecular lines these are blank
     molec = info.get('molec')
-    if molec is not None and molec is True:
+    if molec is not None and molec==True:
         gam,stark,vdW,inext = '','','',''
         
     # Essential columns are lambda, orggf, specid, EP1, J1, EP2, J2
@@ -2446,6 +2608,53 @@ def writer_turbo(info):
 
     """
 
+    # col 1: lambda(A)  
+    # col 2: Elow(eV) 
+    # col 3: loggf 
+    # col 4: fdamp (see below)
+    # col 5: gup
+    # col 6: gamma_rad (if =0, gf-value is used to compute gamma_rad)
+    # col 7: gamma_Stark (may be omitted)
+    # col 8: s,p,d,f etc for upper level (or X), see fdamp
+    # col 9: same for lower level
+    # col 10: equivalent width, when needed (abundance determination in eqwidt run)
+    # col 11: error in eqw
+    # col 12: (in quotes) some text describing levels or whatever you like to include
+    # The following columns are only used in NLTE run:
+    # col 13: lower level number in NLTE model atom
+    # col 14: same for upper level
+    # col 15: lower level id
+    # col 16: same for upper level
+    
+    # from bsyn.f
+
+    # XLB= wavelength in Angstroem
+    # CHIE= excitation pot (in eV) of lower level
+    # GFELOG= log(gf)
+    # GU the upper statistical weight for the line, is only of
+    #    importance for damping and if raddmp is not 0.
+    # FDAMP  is a fudge factor to increase damping constant
+    # RADDMP externaly calculated radiation damping (if needed)
+    # f = f-value (as g=1., f is in fact gf-value).
+
+    # New, Stark, NLTE (16 values)
+    #   xlb,chie,gfelog,fdamp,gu,raddmp,gamst,levlo,levup,eqw,eqwerr,
+    #   comment_line,ilevlo,ilevup,idlevlo,idlevup
+
+    # New, Stark, no-NLTE (9 values)
+    #   xlb,chie,gfelog,fdamp,gu,raddmp,gamst,levlo,levup    
+
+    # New, NO Stark, NLTE (15 values)
+    #   xlb,chie,gfelog,fdamp,gu,raddmp,levlo,levup,eqw,eqwerr,
+    #   comment_line,ilevlo,ilevup,idlevlo,idlevup
+
+    # New, NO Stark, no NLTE (or molecular) (8 values)
+    #   xlb,chie,gfelog,fdamp,gu,raddmp,levlo,levup
+
+    # Old format, molecular linelist (6 values)
+    #   xlb,chie,gfelog,fdamp,gu,raddmp
+    #    uses gamst=0.0
+    
     # H I lines with Stark broadening. Special treatment.
     # species,lele,iel,ion,(isotope(nn),nn=1,natom)
     
@@ -2512,30 +2721,55 @@ def writer_turbo(info):
     if lam is None or specid is None or name is None or loggf is None:
         raise ValueError('Need lambda, id, name and loggf for Turbospectrum format')
     ep = info.get('ep')
-    gu = info.get('gu')
-    if ep is None or np.ma.is_masked(ep) or gu is None or np.ma.is_masked(gu):
-        # compute ep from individual energy levels
-        EP1 = info.get('EP1')
-        J1 = info.get('J1')  
-        EP2 = info.get('EP2')
-        J2 = info.get('J2')
-        if EP1 is None or J1 is None or EP2 is None or J2 is None:
-            raise ValueError('Need ep and gu OR EP1,J1,EP2,J2')
-        EP1 = EP1.value   # need scalars
-        EP2 = EP2.value
-        # Calculate excitation potential from EP1 and EP2
-        if gu is None: gu = 99
-        if (float(EP1) < 0):
-            ep = -float(EP1); gu = (float(J2) * 2.0) + 1
-        else:
-            ep = float(EP1); gu = (float(J2) * 2.0) + 1
-        if (float(EP2) < 0):
-            EP2 = -float(EP2)
-        if (float(EP2) < float(ep)):
-            ep = float(EP2); gu = (float(J1) * 2.0) + 1  
-    else:
+    if ep is not None and np.ma.is_masked(ep)==False:
         ep = ep.value
-        
+    gu = info.get('gu')
+    EP1 = info.get('EP1')
+    J1 = info.get('J1')  
+    EP2 = info.get('EP2')
+    J2 = info.get('J2')
+    molec = info.get('molec')    
+    # MOLECULAR
+    if molec==True:
+        # gu is used for the radiative damping, but
+        #  only makes a small differences
+        #  BUT it CANNOT be 0.0, that will cause turbospectrum to crash/infinite loop
+        if gu is None:
+            gu = 1.0
+        # compute ep from individual energy levels    
+        if (ep is None or np.ma.is_masked(ep)):
+            if EP1 is None or EP2 is None:
+                raise ValueError('Need ep OR EP1,EP2')
+            EP1 = EP1.value   # need scalars
+            EP2 = EP2.value
+            # Calculate excitation potential from EP1 and EP2
+            if (float(EP1) < 0):
+                ep = -float(EP1)
+            else:
+                ep = float(EP1)
+            if (float(EP2) < 0):
+                EP2 = -float(EP2)
+            if (float(EP2) < float(ep)):
+                ep = float(EP2)
+    # ATOMIC
+    else:
+        if ep is None or np.ma.is_masked(ep) or gu is None:
+            # compute ep from individual energy levels
+            if EP1 is None or J1 is None or EP2 is None or J2 is None:
+                raise ValueError('Need ep and gu OR EP1,J1,EP2,J2')
+            EP1 = EP1.value   # need scalars
+            EP2 = EP2.value
+            # Calculate excitation potential from EP1 and EP2
+            if gu is None: gu = 99
+            if (float(EP1) < 0):
+                ep = -float(EP1); gu = (float(J2) * 2.0) + 1
+            else:
+                ep = float(EP1); gu = (float(J2) * 2.0) + 1
+            if (float(EP2) < 0):
+                EP2 = -float(EP2)
+            if (float(EP2) < float(ep)):
+                ep = float(EP2); gu = (float(J1) * 2.0) + 1  
+                
     # Check that we have the essentials
     if lam is None or loggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
         raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2')
@@ -2559,7 +2793,7 @@ def writer_turbo(info):
         
     # For molecular lines these are blank
     molec = info.get('molec')
-    if molec is not None and molec is True:
+    if molec is not None and molec==True:
         # molecular lines only has the first 6 columns
         # 15000.983  2.490  -5.316  0.00   48.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
         # 15000.990  2.802  -3.735  0.00  194.0  1.00e+00  0.000  'x' 'x'  0.0  1.0
@@ -2662,6 +2896,7 @@ def list2table(info):
             # all Nones, use masked floats
             types[i] = float
             col = MaskedColumn(np.zeros(nrows),mask=np.ones(nrows,bool),name=names[i],dtype=float)
+            unit = None
         else:
             types[i] = type(val)
             dd = data[i]
@@ -3031,8 +3266,8 @@ class Converter(object):
         if self.intype=='vald' and self.outtype in ['kurucz','synspec','aspcap','turbo']:
             raise Exception('Cannot convert VALD to Kurucz/Synspec/ASPCAP/Turbospectrum')
         # Cannot do Synspec -> Kurucz
-        if self.intype=='synspec' and self.outtype in ['kurucz','aspcap','turbo']:
-            raise Exception('Cannot convert Synspec to Kurucz/ASPCAP/Turbospectrum')
+        if self.intype=='synspec' and self.outtype in ['kurucz','aspcap']:
+            raise Exception('Cannot convert Synspec to Kurucz/ASPCAP')
         # Cannot do Turbospectrum -> Synspec
         #  Synspec needs lambda,loggf,specid,EP1,J1,EP2,J2
         if self.inturbo and self.outtype in ['kurucz','aspcap','synspec']:

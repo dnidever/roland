@@ -36,7 +36,7 @@ except ImportError:
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
-bolk = 1.38054e-16  # erg/ K
+kboltz = 1.38054e-16  # erg/ K
 cspeed = 2.99792458e5  # speed of light in km/s
 
 ## Load the MARCS grid data and index
@@ -408,22 +408,22 @@ def read_marcs_model(modelfile):
   
     Returns
     -------
-
-    teff : float
-        effective temperature (K)
-    logg : float
-        log10 of the surface gravity (cm s-2)
-    vmicro : float
-        microturbulence velocity (km/s)
+    data : numpy array
+      Array with model atmosphere data.
+    header : list
+      Entire file header lines.
+    labels : list
+      List of [Teff, logg, vmicro].
     abu : list
-      abundances, number densities of nuclei relative to hydrogen N(X)/N(H)
-      for elements Z=1,99 (H to Es)
-    nd: int
-      number of depths (layers) of the model
-    atmos: numpy structured array
-      array with the run with depth of column mass, temperature, gas pressure 
-      and electron density  
-  
+      List of abundances.
+    tail : list
+      Tail lines.
+
+    Example
+    -------
+    
+    data, header, labels, abu, tail = read_marcs_model(modelfile)
+
     """  
 
     if type(modelfile) is str:
@@ -513,21 +513,23 @@ def read_marcs_model(modelfile):
     while (line.strip()!=''):
         line = f.readline().rstrip()
         tail.append(line)
-    
+    if tail[-1]=='':
+        tail = tail[0:-1]
+        
     # Get the header
     header = []
     if type(modelfile) is str:
         with open(modelfile,'r') as f:
             line = ''
             while line.startswith('Model structure')==False:
-                line = f.readline().strip()
+                line = f.readline().rstrip()
                 header.append(line)
     elif type(modelfile) is io.StringIO:  # StringIO input
         modelfile.seek(0)  # go to the beginning
         with modelfile as f:
             line = ''
             while line.startswith('Model structure')==False:
-                line = f.readline().strip()
+                line = f.readline().rstrip()
                 header.append(line)
         
     return data, header, labels, abu, tail
@@ -918,10 +920,11 @@ class Atmosphere(object):
 
     """
 
-    def __init__(self,data,header,params=None,labels=None,abu=None):
+    def __init__(self,data,header,params=None,labels=None,abu=None,tail=None):
         """ Initialize Atmosphere object. """
         self.data = data
         self.header = header
+        self.tail = tail
         self.ncols = self.data.shape[1]
         self.ndepths = self.data.shape[0]
         self.params = params   # parameter values
@@ -1031,9 +1034,19 @@ class KuruczAtmosphere(Atmosphere):
 
     # RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB, FLXCNV
     
-    def __init__(self,data,header,params=None,labels=None,abu=None,scale=None):
+    def __init__(self,data,header=None,params=None,labels=None,abu=None,tail=None,scale=None):
         """ Initialize Atmosphere object. """
-        super().__init__(data,header,params,labels,abu)
+        # lines input, parse the data
+        lines = None
+        if type(data) is list and header is None:
+            lines = data
+            iolines = io.StringIO('\n'.join(lines))
+            data,header,params,abu,tail = read_kurucz_model(iolines)
+        if labels is None:
+            labels = ['teff','logg','metals','alpha','vmicro']
+        super().__init__(data,header,params,labels,abu,tail)
+        if lines is not None:
+            self._lines = lines  # save the lines input
         self.scale = scale        
         self.mtype = 'kurucz'
         self.columns = ['dmass','temperature','pressure','edensity',
@@ -1079,54 +1092,39 @@ class KuruczAtmosphere(Atmosphere):
     # RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB, FLXCNV
     
     @property
-    def mass(self):
-        """ Return the mass data."""
+    def dmass(self):
+        """ Return column mass above this shell [g/cm2]."""        
         return self.data[:,0]
 
     @property
     def temperature(self):
-        """ Return the temperature versus depth."""
+        """ Return the temperature versus depth [K]."""
         return self.data[:,1]
 
     @property
     def pressure(self):
-        """ Return the pressure versus depth"""
+        """ Return the pressure [dyne/cm2] versus depth."""
         return self.data[:,2]
 
     @property
     def edensity(self):
-        """ Return the electron number density versus depth."""
+        """ Return the electron number density [1/cm3] versus depth."""
         return self.data[:,3]
     
     @property
-    def abross(self):
-        """ Return Rosseland mean absorption coefficient versus depth."""
+    def kappaross(self):
+        """ Return Rosseland mean absorption coefficient (kappa Ross) [cm2/g] versus depth."""
         return self.data[:,4]
 
     @property
     def radacc(self):
-        """ Return radiative acceleration versus depth."""
+        """ Return radiative acceleration [cm/s2] versus depth."""
         return self.data[:,5]
 
     @property
     def microvel(self):
-        """ Return microturbulent velocity (meters/second) versus depth."""
+        """ Return microturbulent velocity [cm/s] versus depth."""
         return self.data[:,6]
-
-    @property
-    def tauross(self):
-        """ Return tauross, the Rosseland optical depth."""
-        if self._tauross is None:
-            self._tauross = self._calc_tauross()
-        return self._tauross
-    
-    def _calc_tauross(self):
-        """ Calculate tauross."""
-        tauross = np.zeros(self.ndepths,float)
-        tauross[0] = self.mass[0]*self.abross[0]
-        for i in np.arange(1,self.ndepths):
-            tauross[i] = trapz(self.abross[0:i+1],self.mass[0:i+1])
-        return tauross
     
     #The newer Kurucz/Castelli models have three additional columns which give
     #-the amount of flux transported by convection, (FLXCNV)
@@ -1135,18 +1133,45 @@ class KuruczAtmosphere(Atmosphere):
     
     @property
     def fluxconv(self):
-        """ Return flux transported by convection, (FLXCNV) versus depth."""
+        """ Return flux transported by convection (FLXCNV) [ergs/s/cm2] versus depth."""
         return self.data[:,7]    
+
+    @property
+    def velconv(self):
+        """ Return convective velocity [cm/s]."""
+        return self.data[:,8]
+
+    @property
+    def velsound(self):
+        """ Return sound velocity [cm/s]."""
+        return self.data[:,9]
+
+    @property
+    def tauross(self):
+        """ Return tauross, the Rosseland optical depth."""
+        if self._tauross is None:
+            # According to Castelli & Kurucz (2003) each model has the same number of 72 plane parallel layers
+            # from log tau ross = -6.875 to +2.00 at steps of log tau ross = 0.125
+            logtauross = np.arange(72)*0.125-6.875
+            tauross = 10**(logtauross)
+            self._tauross = tauross
+            #self._tauross = self._calc_tauross()
+        return self._tauross
+
+    def _calc_tauross(self):
+        """ Calculate tauross."""
+        # This does NOT seem to work quite right!!!
+        tauross = np.zeros(self.ndepths,float)
+        tauross[0] = self.dmass[0]*self.kappaross[0]
+        for i in np.arange(1,self.ndepths):
+            tauross[i] = utils.trapz(self.kappaross[0:i+1],self.dmass[0:i+1])
+        return tauross
     
-    #@classmethod
-    #def read(cls,mfile):
-    #    """ Read in a single Atmosphere file."""    
-    #    data,header,labels,abu = read_kurucz_model(mfile)
-    #    return Atmosphere(data,header,labels,abu)
-
-    def write(self,mfile):
-        """ Write out a single Atmosphere Model."""
-
+    @property
+    def lines(self):
+        """ Return the lines of the model atmosphere."""
+        if self._lines is not None:
+            return self._lines
         data = self.data
         header = self.header
 
@@ -1162,36 +1187,249 @@ class KuruczAtmosphere(Atmosphere):
 
             # Output 9 columns (ATLAS12 format) unless we have 10 columns
             if ncols==8:
-                newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E 0.000E+00\n' % tuple(data[i,:])
+                newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E 0.000E+00' % tuple(data[i,:])
             elif ncols==9:
-                newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E\n' % tuple(data[i,:])                
+                newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E' % tuple(data[i,:])                
             elif ncols==10:
-                newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E\n' % tuple(data[i,:])
+                newline = '%15.8E%9.1f%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E%10.3E' % tuple(data[i,:])
             else:
                 raise ValueError('Only 8 or 10 columns supported')
             datalines.append(newline)
         lines = header + datalines
 
         # Add the two tail lines
-        # In the last row, PRADK is the radiation pressure at the surface.
-        lines.append('PRADK 1.9978E-01\n')      # dummy value for now
-        lines.append('BEGIN                    ITERATION  15 COMPLETED\n')
-        
+        if self.tail is not None:
+            lines += self.tail
+        # Save the lines for later
+        self._lines = lines
+        return self._lines
+
+    def write(self,mfile):
+        """ Write out a single Atmosphere Model."""
+        lines = self.lines
         # write text file
         if os.path.exists(mfile): os.remove(mfile)
         f = open(mfile, 'w')
-        f.writelines(lines)
+        for l in lines: f.write(l+'\n')
         f.close()
 
+    def to_marcs(self):
+        """ Convert to MARCS format."""
+
+        # -- Kurucz columns --
+        # 1) mass depth [g/cm2]
+        # 2) temperature, [K], of the layer
+        # 3) gas pressure,  [dyne/cm2]
+        # 4) electron number density [1/cm3]
+        # 5) Rosseland mean absorption coefficient (kappa Ross) [cm2/g]
+        # 6) radiative acceleration [cm/s2]
+        #      the radiative acceleration g_rad due to the absorption of radiation
+        # 7) microturbulent velocity in [cm/s]
+        # The newer Kurucz/Castelli models have three additional columns which give
+        # 8) amount of flux transported by convection, (FLXCNV) [ergs/s/cm2]
+        # 9) convective velocity (VCONV) [cm/s]
+        # 10) sound velocity (VELSND)  [cm/s]
+        # RHOX, T, P, XNE, ABROSS, ACCRAD, VTURB, FLXCNV, VCONV, VELSND
+        # ntau = 72
+        # ncols = 10 
+        
+        # -- MARCS columns --
+        # First set of columns
+        # 1) log Tau Ross (lgTauR)
+        # 2) log Tau optical depth at 500 nm (lgTau5)
+        # 3) depth in cm (Depth)
+        # 4) temperature in K (T)
+        # 5) electron pressure in dyn/cm2 (Pe)
+        # 6) gas pressure in dyn/cm2 (Pg)
+        # 7) radiation pressure in dyn/cm2 (Prad)
+        # 8) turbulence pressure in dyn/cm2 (Pturb)
+        # 9) kappa Ross cm2/g (KappaRoss)
+        # 10) density in g/cm3 (Density)
+        # 11) mean molecular weight in amu (Mu)
+        # 12) convection velocity in cm/s (Vconv)
+        # 13) fraction of convection flux (Fconv/F)
+        # 14) mass per shell in g/cm2 (RHOX)
+        #  k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb
+        #   1 -5.00 -4.7483 -1.904E+09  4202.3  3.8181E-03  3.8593E+01  1.7233E+00  0.0000E+00
+        #   2 -4.80 -4.5555 -1.824E+09  4238.3  5.0499E-03  5.0962E+01  1.7238E+00  0.0000E+00
+        #   3 -4.60 -4.3741 -1.744E+09  4280.8  6.6866E-03  6.7097E+01  1.7245E+00  0.0000E+00
+        #   4 -4.40 -4.1988 -1.663E+09  4325.2  8.8474E-03  8.8133E+01  1.7252E+00  0.0000E+00
+        #   5 -4.20 -4.0266 -1.583E+09  4370.8  1.1686E-02  1.1542E+02  1.7262E+00  0.0000E+00
+        # Second set of columns
+        # k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX
+        #  1 -5.00  4.2674E-04  1.3996E-10 1.257  0.000E+00 0.00000  4.031597E-02
+        #  2 -4.80  5.1413E-04  1.8324E-10 1.257  0.000E+00 0.00000  5.268627E-02
+        #  3 -4.60  6.2317E-04  2.3886E-10 1.257  0.000E+00 0.00000  6.882111E-02
+        #  4 -4.40  7.5997E-04  3.1053E-10 1.257  0.000E+00 0.00000  8.985844E-02
+        #  5 -4.20  9.3110E-04  4.0241E-10 1.257  0.000E+00 0.00000  1.171414E-01
+        ntau = 56
+        ncols = 14 
+
+        # Interpolate tauross
+        tauross = self.tauross
+        # MARCS always has log tauross from -5.00 to +2.0        
+        bot_tauross = min([tauross[-1],100.0])
+        top_tauross = max([tauross[0],1e-5])
+        # constant steps in log space
+        if bot_tauross==100 and top_tauross==1e-5:
+            # These are the tauross values that MARCS uses
+            #  constant 0.2 steps from -5 to -3
+            #  constant 0.1 steps from -3 to +1
+            #  constant 0.2 steps from +1 to +2
+            tauross_new = np.array([-5. , -4.8, -4.6, -4.4, -4.2, -4. , -3.8, -3.6, -3.4, -3.2, -3. ,
+                                    -2.9, -2.8, -2.7, -2.6, -2.5, -2.4, -2.3, -2.2, -2.1, -2. , -1.9,
+                                    -1.8, -1.7, -1.6, -1.5, -1.4, -1.3, -1.2, -1.1, -1. , -0.9, -0.8,
+                                    -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, -0. ,  0.1,  0.2,  0.3,
+                                    0.4,  0.5,  0.6,  0.7,  0.8,  0.9,  1. ,  1.2,  1.4,  1.6,  1.8,
+                                    2. ])
+            tauross_new = 10**tauross_new
+        else:
+            tauross_new = 10**np.linspace(np.log10(top_tauross),np.log10(bot_tauross),ntau,endpoint=True)
+        
+        # Need to interpolate in tauross
+        model = np.zeros((ntau,ncols),float)
+        # Interpolate log Tau Ross
+        model[:,0] = np.log10(tauross_new)
+        # Interpolate log Tau 500nm
+        model[:,1] = np.log10(tauross_new)  # ???
+        # Interpolate depth in cm
+        #model[:,2] = np.interp(tauross_new,tauross,depth)
+        # Interpolate temperature
+        model[:,3] = np.interp(tauross_new,tauross,self.temperature)  # looks good
+        # Interpolate electron pressure
+        #  Convert electron number density [1/cm3] to pressure, P = n*k_B*T
+        epressure = self.edensity*kboltz*self.temperature
+        model[:,4] = np.interp(tauross_new,tauross,epressure)
+        # Interpolate gas pressure
+        model[:,5] = np.interp(tauross_new,tauross,self.pressure)
+        # Interpolate radiation pressure
+        #  Radiation pressure, Prad = 1/3 * a * T^4  (10.19 in C+O)
+        #  a = radiation constant = 4sigma/c = 7.565767e-16 J/m3/K4
+        #    = 7.5646e-15 erg/cm3/K4 
+        radpressure = 7.5646e-15 * self.temperature**4
+        model[:,6] = np.interp(tauross_new,tauross,radpressure)
+        # Interpolate turbulence pressure
+        #model[:,7] = np.interp(tauross_new,tauross,self.xx)
+        # Interpolate kappa ross
+        model[:,8] = np.interp(tauross_new,tauross,self.kappaross)  # looks good
+        # Interpolate density
+        #  difference in Tau between layers is
+        #  delta_tau = Integral{kappa*density}ds ~ kappa * density * s
+        #  so we can probably get density from delta_Tau and Kappa
+        dtau = np.gradient(tauross)
+        #thickness = np.gradient(self.depth)
+        #density = dtau/(self.kappaross*thickness)
+        # THIS METHOD works (I tried with MARCS data), but we don't have
+        #   depth in the Kurucz models
+        model[:,9] = np.interp(tauross_new,tauross,density)
+        # Interpolate mean molecular weight
+        #  n = rho / mu,  mean molecular weight (pg.291 in C+O)
+        #model[:,10] = np.interp(tauross_new,tauross,self.xx)
+        # Interpolate convection velocity
+        model[:,11] = np.interp(tauross_new,tauross,self.velconv)  # looks good
+        # Interpolate fraction of convection flux
+        #model[:,12] = np.interp(tauross_new,tauross,self.xx)
+        # Interpolate RHOX 
+        model[:,13] = np.interp(tauross_new,tauross,self.dmass)    # looks good
+
+        # 1 dyn = g cm/s2
+        
+        # difference in Tau between layers is
+        # Integral{kappa*density}ds
+        # so we can probably get density from delta_Tau and Kappa
+
+        # n = rho / mu,  mean molecular weight (pg.291 in C+O)
+        
+        # sound velocity = sqrt(gamma*R*T/M)
+        # gamma = adiabatic constant, depends on the constant (1.4 for air)
+        #   gamma = Cp/Cv, ratio of specific heats at constant pressure and volume
+        #   for monatomic gas gamma=5/3
+        #    Cp = Cv + nR
+        # R = gas constant, 8.314 J/mol K
+        # T = temperature [K]
+        # M = molecular mass of gas [kg/mol]
+
+        # v_sound = sqrt(gamma*P/rho) (10.84 in C+O)
+        # gamma = adiabatic constant, depends on the constant (1.4 for air)
+        #   gamma = Cp/Cv, ratio of specific heats at constant pressure and volume
+        #   for monatomic gas gamma=5/3
+        #    Cp = Cv + nR
+        
+        # Radiation pressure, Prad = 1/3 * a * T^4  (10.19 in C+O)
+        # a = radiation constant = 4sigma/c = 7.565767e-16 J/m3/K4
+        
+        
+        import pdb; pdb.set_trace()
+
+        # Need header
+        header = ['TEFF   5000.  GRAVITY 3.00000 LTE',
+                  'TITLE  [0.0] VTURB=2  L/H=1.25 NOVER NEW ODF',
+                  ' OPACITY IFOP 1 1 1 1 1 1 1 1 1 1 1 1 1 0 1 0 0 0 0 0',
+                  ' CONVECTION ON   1.25 TURBULENCE OFF  0.00  0.00  0.00  0.00',
+                  'ABUNDANCE SCALE   1.00000 ABUNDANCE CHANGE 1 0.92040 2 0.07834',
+                  ' ABUNDANCE CHANGE  3 -10.94  4 -10.64  5  -9.49  6  -3.52  7  -4.12  8  -3.21',
+                  ' ABUNDANCE CHANGE  9  -7.48 10  -3.96 11  -5.71 12  -4.46 13  -5.57 14  -4.49',
+                  ' ABUNDANCE CHANGE 15  -6.59 16  -4.71 17  -6.54 18  -5.64 19  -6.92 20  -5.68',
+                  ' ABUNDANCE CHANGE 21  -8.87 22  -7.02 23  -8.04 24  -6.37 25  -6.65 26  -4.54',
+                  ' ABUNDANCE CHANGE 27  -7.12 28  -5.79 29  -7.83 30  -7.44 31  -9.16 32  -8.63',
+                  ' ABUNDANCE CHANGE 33  -9.67 34  -8.63 35  -9.41 36  -8.73 37  -9.44 38  -9.07',
+                  ' ABUNDANCE CHANGE 39  -9.80 40  -9.44 41 -10.62 42 -10.12 43 -20.00 44 -10.20',
+                  ' ABUNDANCE CHANGE 45 -10.92 46 -10.35 47 -11.10 48 -10.27 49 -10.38 50 -10.04',
+                  ' ABUNDANCE CHANGE 51 -11.04 52  -9.80 53 -10.53 54  -9.87 55 -10.91 56  -9.91',
+                  ' ABUNDANCE CHANGE 57 -10.87 58 -10.46 59 -11.33 60 -10.54 61 -20.00 62 -11.03',
+                  ' ABUNDANCE CHANGE 63 -11.53 64 -10.92 65 -11.69 66 -10.90 67 -11.78 68 -11.11',
+                  ' ABUNDANCE CHANGE 69 -12.04 70 -10.96 71 -11.98 72 -11.16 73 -12.17 74 -10.93',
+                  ' ABUNDANCE CHANGE 75 -11.76 76 -10.59 77 -10.69 78 -10.24 79 -11.03 80 -10.91',
+                  ' ABUNDANCE CHANGE 81 -11.14 82 -10.09 83 -11.33 84 -20.00 85 -20.00 86 -20.00',
+                  ' ABUNDANCE CHANGE 87 -20.00 88 -20.00 89 -20.00 90 -11.95 91 -20.00 92 -12.54',
+                  ' ABUNDANCE CHANGE 93 -20.00 94 -20.00 95 -20.00 96 -20.00 97 -20.00 98 -20.00',
+                  ' ABUNDANCE CHANGE 99 -20.00',
+                  'READ DECK6 72 RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB, FLXCNV,VCONV,VELSND']
+        
+        header = ['s5000_g+3.0_m1.0_t02_x3_z+0.00_a+0.00_c+0.00_n+0.00_o+0.00_r+0.00_s+0.00',
+                '  5000.      Teff [K] f APOGEE Last iteration; yyyymmdd=20160916',
+                '  3.5440E+10 Flux [erg/cm2/s]',
+                '  1.0000E+03 Surface gravity [cm/s2]',
+                '  2.0        Microturbulence parameter [km/s]',
+                '  1.0        Mass [Msun]',
+                ' +0.00 +0.00 Metallicity [Fe/H] and [alpha/Fe]',
+                '  3.6526E+11 Radius [cm] at Tau(Rosseland)=1.0',
+                '    15.56040 Luminosity [Lsun]',
+                '  1.50 8.00 0.076 0.00 are the convection parameters: alpha, nu, y and beta',
+                '  0.73826 0.24954 1.22E-02 are X, Y and Z, 12C/13C=89 (=solar)',
+                'Logarithmic chemical number abundances, H always 12.00',
+                '  12.00  10.93   1.05   1.38   2.70   8.39   7.78   8.66   4.56   7.84',
+                '   6.17   7.53   6.37   7.51   5.36   7.14   5.50   6.18   5.08   6.31',
+                '   3.17   4.90   4.00   5.64   5.39   7.45   4.92   6.23   4.21   4.60',
+                '   2.88   3.58   2.29   3.33   2.56   3.25   2.60   2.92   2.21   2.58',
+                '   1.42   1.92 -99.00   1.84   1.12   1.66   0.94   1.77   1.60   2.00',
+                '   1.00   2.19   1.51   2.24   1.07   2.17   1.13   1.70   0.58   1.45',
+                ' -99.00   1.00   0.52   1.11   0.28   1.14   0.51   0.93   0.00   1.08',
+                '   0.06   0.88  -0.17   1.11   0.23   1.25   1.38   1.64   1.01   1.13',
+                '   0.90   2.00   0.65 -99.00 -99.00 -99.00 -99.00 -99.00 -99.00   0.06',
+                ' -99.00  -0.52',
+                '  56 Number of depth points',
+                'Model structure']
+        
+        # Skip the partial pressures
+        
 
 class MARCSAtmosphere(Atmosphere):
     """ Class for MARCS model atmosphere."""
     
-    def __init__(self,data,header,params=None,labels=None,abu=None,footer=None):
+    def __init__(self,data,header=None,params=None,labels=None,abu=None,tail=None):
         """ Initialize Atmosphere object. """
-        super().__init__(data,header,params,labels,abu)
+        lines = None
+        if type(data) is list and header is None:
+            lines = data
+            iolines = io.StringIO('\n'.join(lines))
+            data,header,params,abu,tail = read_marcs_model(iolines)
+        if labels is None:
+            labels = ['teff','logg','metals','alpha','vmicro']            
+        super().__init__(data,header,params,labels,abu,tail)
+        if lines is not None:
+            self._lines = lines  # save the lines input
         self.mtype = 'marcs'
-        self.footer = footer
         self.columns = ['tauross','tau5000','depth','temperature','epressure','gaspressure',
                         'radpressure','turbpressure','kappaross','density','mnmolecweight',
                         'velconv','frconvflux','dmass']
@@ -1242,13 +1480,13 @@ class MARCSAtmosphere(Atmosphere):
     
     @property
     def tauross(self):
-        """ Return the Rosseland mean optical depth data."""
-        return self.data[:,0]
+        """ Return the linear Rosseland mean optical depth data."""
+        return 10**self.data[:,0]
 
     @property
     def tau5000(self):
-        """ Return the optical depth at 5000A data."""
-        return self.data[:,1]
+        """ Return the linear optical depth at 5000A data."""
+        return 10**self.data[:,1]
 
     @property
     def depth(self):
@@ -1310,17 +1548,12 @@ class MARCSAtmosphere(Atmosphere):
         """ Return column mass above this shell [g/cm2]."""
         return self.data[:,13]  
 
-    # ADD UNITS
-    
-    #@classmethod
-    #def read(cls,mfile):
-    #    """ Read in a single Atmosphere file."""    
-    #    data,header,labels,abu = read_kurucz_model(mfile)
-    #    return Atmosphere(data,header,labels,abu)
-
-    def write(self,mfile):
-        """ Write out a single Atmosphere Model."""
-
+    @property
+    def lines(self):
+        """ Return the lines of the model atmosphere."""
+        if self._lines is not None:
+            return self._lines
+        # Construct the lines
         data = self.data
         header = self.header
         ndata,ncols = data.shape
@@ -1331,9 +1564,9 @@ class MARCSAtmosphere(Atmosphere):
         #   1 -5.00 -4.3387 -2.222E+11  3935.2  9.4190E-05  8.3731E-01  1.5817E+00  0.0000E+00
         #fmt = '(I3,F6.2,F8.4,F11.3,F8.1,F12.4,F12.4,F12.4,F12.4)'
         datalines = []
-        datalines.append(' k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb\n')
+        datalines.append(' k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb')
         for i in range(ndata):
-            fmt = '{0:3d}{1:6.2f}{2:8.4f}{3:11.3E}{4:8.1f}{5:12.4E}{6:12.4E}{7:12.4E}{8:12.4E}\n'
+            fmt = '{0:3d}{1:6.2f}{2:8.4f}{3:11.3E}{4:8.1f}{5:12.4E}{6:12.4E}{7:12.4E}{8:12.4E}'
             newline = fmt.format(i+1,data[i,0],data[i,1],data[i,2],data[i,3],data[i,4],data[i,5],data[i,6],data[i,7])
             datalines.append(newline)
 
@@ -1341,35 +1574,211 @@ class MARCSAtmosphere(Atmosphere):
         # k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX
         #  1 -5.00  1.0979E-04  3.2425E-12 1.267  0.000E+00 0.00000  2.841917E-01
         #fmt = '(I3,F6.2,F12.4,F12.4,F6.3,F11.3,F8.4,F14.4)'            
-        datalines.append(' k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX\n')
+        datalines.append(' k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX')
         for i in range(ndata):
-            fmt = '{0:3d}{1:6.2f}{2:12.4E}{3:12.4E}{4:6.3f}{5:11.3E}{6:8.5f}{7:14.6E}\n'
+            fmt = '{0:3d}{1:6.2f}{2:12.4E}{3:12.4E}{4:6.3f}{5:11.3E}{6:8.5f}{7:14.6E}'
             newline = fmt.format(i+1,data[i,0],data[i,8],data[i,9],data[i,10],data[i,11],data[i,12],data[i,13])
             datalines.append(newline)
             
         lines = header + datalines
+        # Add tail
+        if self.tail is not None:
+            lines += self.tail
+        # Save the lines for later
+        self._lines = lines
+        return self._lines
 
-        # Add footer
-        if len(self.footer)>0:
-            lines += self.footer
-        
+    def write(self,mfile):
+        """ Write out a single Atmosphere Model."""
+        lines = self.lines
         # write text file
         if os.path.exists(mfile): os.remove(mfile)
         f = open(mfile, 'w')
-        f.writelines(lines)
+        for l in lines: f.write(l+'\n')
         f.close()
 
+    def to_kurucz(self):
+        """ Convert to Kurucz format."""
+
+        # -- MARCS columns --
+        # First set of columns
+        # 1) log Tau Ross (lgTauR)
+        # 2) log Tau optical depth at 500 nm (lgTau5)
+        # 3) depth in cm (Depth)
+        # 4) temperature in K (T)
+        # 5) electron pressure in dyn/cm2 (Pe)
+        # 6) gas pressure in dyn/cm2 (Pg)
+        # 7) radiation pressure in dyn/cm2 (Prad)
+        # 8) turbulence pressure in dyn/cm2 (Pturb)
+        # 9) kappa Ross cm2/g (KappaRoss)
+        # 10) density in g/cm3 (Density)
+        # 11) mean molecular weight in amu (Mu)
+        # 12) convection velocity in cm/s (Vconv)
+        # 13) fraction of convection flux (Fconv/F)
+        # 14) mass per shell in g/cm2 (RHOX)
+        #  k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb
+        #   1 -5.00 -4.7483 -1.904E+09  4202.3  3.8181E-03  3.8593E+01  1.7233E+00  0.0000E+00
+        #   2 -4.80 -4.5555 -1.824E+09  4238.3  5.0499E-03  5.0962E+01  1.7238E+00  0.0000E+00
+        #   3 -4.60 -4.3741 -1.744E+09  4280.8  6.6866E-03  6.7097E+01  1.7245E+00  0.0000E+00
+        #   4 -4.40 -4.1988 -1.663E+09  4325.2  8.8474E-03  8.8133E+01  1.7252E+00  0.0000E+00
+        #   5 -4.20 -4.0266 -1.583E+09  4370.8  1.1686E-02  1.1542E+02  1.7262E+00  0.0000E+00
+        # Second set of columns
+        # k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX
+        #  1 -5.00  4.2674E-04  1.3996E-10 1.257  0.000E+00 0.00000  4.031597E-02
+        #  2 -4.80  5.1413E-04  1.8324E-10 1.257  0.000E+00 0.00000  5.268627E-02
+        #  3 -4.60  6.2317E-04  2.3886E-10 1.257  0.000E+00 0.00000  6.882111E-02
+        #  4 -4.40  7.5997E-04  3.1053E-10 1.257  0.000E+00 0.00000  8.985844E-02
+        #  5 -4.20  9.3110E-04  4.0241E-10 1.257  0.000E+00 0.00000  1.171414E-01
+        # ntau = 56
+        # ncols = 14 
+        
+        # -- Kurucz columns --
+        # 1) mass depth [g/cm2]
+        # 2) temperature, [K], of the layer,
+        # 3) gas pressure,  [dyne/cm2]
+        # 4) electron number density [1/cm3]
+        # 5) Rosseland mean absorption coefficient (kappa Ross) [cm2/g]
+        # 6) radiative acceleration [cm/s2]
+        # 7) microturbulent velocity in [cm/s]
+        # The newer Kurucz/Castelli models have three additional columns which give
+        # 8) amount of flux transported by convection, (FLXCNV) [ergs/s/cm2]
+        # 9) convective velocity (VCONV) [cm/s]
+        # 10) sound velocity (VELSND)  [cm/s]
+        # RHOX, T, P, XNE, ABROSS, ACCRAD, VTURB, FLXCNV, VCONV, VELSND
+        ntau = 72
+        ncols = 10 
+
+        # Interpolate tauross
+        tauross = self.tauross
+        tauross_new = np.linspace(tauross[0],tauross[-1],ntau)
+
+        # Kurucz tauross goes from -6.875 to +2.00, while
+        # MARCS tauross goes from -5.0 to +2.00
+        # we need to extrapolate to get the Kurucz layers
+        
+        # Need to interpolate in tauross
+        model = np.zeros((ntau,ncols),float)
+        # Interpolate RHOX
+        model[:,0] = np.interp(tauross_new,tauross,self.dmass)
+        # Interpolate Temperature
+        model[:,1] = np.interp(tauross_new,tauross,self.temperature)
+        # Interpolate gas pressure
+        model[:,2] = np.interp(tauross_new,tauross,self.gaspressure)
+        # Interpolate electron number density
+        #  Convert electron pressure to electron number density, P = n*k_B*T
+        edensity = self.epressure/(kboltz*self.temperature)
+        model[:,3] = np.interp(tauross_new,tauross,edensity)        
+        # Interpolate Kappa Ross
+        model[:,4] = np.interp(tauross_new,tauross,self.kappaross)
+        # Interpolate radiative acceleration
+        #model[:,5] = np.interp(tauross_new,tauross,self.data[:,X])                
+        # can insert in vmicro/vturb right away
+        model[:,6] = self.vmicro * 1e5  # convert from km/s to cm/s        
+        # Interpolate flux transported by convection
+        #model[:,7] = np.interp(tauross_new,tauross,self.data[:,X])
+        # Interpolate convective velocity
+        model[:,8] = np.interp(tauross_new,tauross,self.data[:,11])
+        # Interpolate sound velocity
+        #  v_sound = sqrt(gamma*P/rho) (10.84 in C+O)
+        #  gamma = adiabatic constant, depends on the constant (1.4 for air)
+        #    gamma = Cp/Cv, ratio of specific heats at constant pressure and volume
+        #    for monatomic gas gamma=5/3
+        #     Cp = Cv + nR
+        #     gamma = Cp/Cv = (Cv+nR)/Cv = 1+nR/Cv
+        gamma = 5/3   # assume ideal monatomic gas
+        velsound = np.sqrt(gamma*self.gaspressure/self.density)
+        model[:,9] = np.interp(tauross_new,tauross,velsound)
+
+        # difference in Tau between layers is
+        # Integral{kappa*density}ds
+        # so we can probably get density from delta_Tau and Kappa
+
+        # n = rho / mu,  mean molecular weight (pg.291 in C+O)
+        
+        # sound velocity = sqrt(gamma*R*T/M)
+        # gamma = adiabatic constant, depends on the constant (1.4 for air)
+        #   gamma = Cp/Cv, ratio of specific heats at constant pressure and volume
+        #   for monatomic gas gamma=5/3
+        #    Cp = Cv + nR
+        # R = gas constant, 8.314 J/mol K
+        # T = temperature [K]
+        # M = molecular mass of gas [kg/mol]
+
+        # v_sound = sqrt(gamma*P/rho) (10.84 in C+O)
+        # gamma = adiabatic constant, depends on the constant (1.4 for air)
+        #   gamma = Cp/Cv, ratio of specific heats at constant pressure and volume
+        #   for monatomic gas gamma=5/3
+        #    Cp = Cv + nR
+        
+        # Radiation pressure, Prad = 1/3 * a * T^4  (10.19 in C+O)
+        # a = radiation constant = 4sigma/c = 7.565767e-16 J/m3/K4
+        
+        import pdb; pdb.set_trace()
+
+        # Need header
+        header = ['TEFF   5000.  GRAVITY 3.00000 LTE',
+                  'TITLE  [0.0] VTURB=2  L/H=1.25 NOVER NEW ODF',
+                  ' OPACITY IFOP 1 1 1 1 1 1 1 1 1 1 1 1 1 0 1 0 0 0 0 0',
+                  ' CONVECTION ON   1.25 TURBULENCE OFF  0.00  0.00  0.00  0.00',
+                  'ABUNDANCE SCALE   1.00000 ABUNDANCE CHANGE 1 0.92040 2 0.07834',
+                  ' ABUNDANCE CHANGE  3 -10.94  4 -10.64  5  -9.49  6  -3.52  7  -4.12  8  -3.21',
+                  ' ABUNDANCE CHANGE  9  -7.48 10  -3.96 11  -5.71 12  -4.46 13  -5.57 14  -4.49',
+                  ' ABUNDANCE CHANGE 15  -6.59 16  -4.71 17  -6.54 18  -5.64 19  -6.92 20  -5.68',
+                  ' ABUNDANCE CHANGE 21  -8.87 22  -7.02 23  -8.04 24  -6.37 25  -6.65 26  -4.54',
+                  ' ABUNDANCE CHANGE 27  -7.12 28  -5.79 29  -7.83 30  -7.44 31  -9.16 32  -8.63',
+                  ' ABUNDANCE CHANGE 33  -9.67 34  -8.63 35  -9.41 36  -8.73 37  -9.44 38  -9.07',
+                  ' ABUNDANCE CHANGE 39  -9.80 40  -9.44 41 -10.62 42 -10.12 43 -20.00 44 -10.20',
+                  ' ABUNDANCE CHANGE 45 -10.92 46 -10.35 47 -11.10 48 -10.27 49 -10.38 50 -10.04',
+                  ' ABUNDANCE CHANGE 51 -11.04 52  -9.80 53 -10.53 54  -9.87 55 -10.91 56  -9.91',
+                  ' ABUNDANCE CHANGE 57 -10.87 58 -10.46 59 -11.33 60 -10.54 61 -20.00 62 -11.03',
+                  ' ABUNDANCE CHANGE 63 -11.53 64 -10.92 65 -11.69 66 -10.90 67 -11.78 68 -11.11',
+                  ' ABUNDANCE CHANGE 69 -12.04 70 -10.96 71 -11.98 72 -11.16 73 -12.17 74 -10.93',
+                  ' ABUNDANCE CHANGE 75 -11.76 76 -10.59 77 -10.69 78 -10.24 79 -11.03 80 -10.91',
+                  ' ABUNDANCE CHANGE 81 -11.14 82 -10.09 83 -11.33 84 -20.00 85 -20.00 86 -20.00',
+                  ' ABUNDANCE CHANGE 87 -20.00 88 -20.00 89 -20.00 90 -11.95 91 -20.00 92 -12.54',
+                  ' ABUNDANCE CHANGE 93 -20.00 94 -20.00 95 -20.00 96 -20.00 97 -20.00 98 -20.00',
+                  ' ABUNDANCE CHANGE 99 -20.00',
+                  'READ DECK6 72 RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB, FLXCNV,VCONV,VELSND']
+        
+        header = ['s5000_g+3.0_m1.0_t02_x3_z+0.00_a+0.00_c+0.00_n+0.00_o+0.00_r+0.00_s+0.00',
+                '  5000.      Teff [K] f APOGEE Last iteration; yyyymmdd=20160916',
+                '  3.5440E+10 Flux [erg/cm2/s]',
+                '  1.0000E+03 Surface gravity [cm/s2]',
+                '  2.0        Microturbulence parameter [km/s]',
+                '  1.0        Mass [Msun]',
+                ' +0.00 +0.00 Metallicity [Fe/H] and [alpha/Fe]',
+                '  3.6526E+11 Radius [cm] at Tau(Rosseland)=1.0',
+                '    15.56040 Luminosity [Lsun]',
+                '  1.50 8.00 0.076 0.00 are the convection parameters: alpha, nu, y and beta',
+                '  0.73826 0.24954 1.22E-02 are X, Y and Z, 12C/13C=89 (=solar)',
+                'Logarithmic chemical number abundances, H always 12.00',
+                '  12.00  10.93   1.05   1.38   2.70   8.39   7.78   8.66   4.56   7.84',
+                '   6.17   7.53   6.37   7.51   5.36   7.14   5.50   6.18   5.08   6.31',
+                '   3.17   4.90   4.00   5.64   5.39   7.45   4.92   6.23   4.21   4.60',
+                '   2.88   3.58   2.29   3.33   2.56   3.25   2.60   2.92   2.21   2.58',
+                '   1.42   1.92 -99.00   1.84   1.12   1.66   0.94   1.77   1.60   2.00',
+                '   1.00   2.19   1.51   2.24   1.07   2.17   1.13   1.70   0.58   1.45',
+                ' -99.00   1.00   0.52   1.11   0.28   1.14   0.51   0.93   0.00   1.08',
+                '   0.06   0.88  -0.17   1.11   0.23   1.25   1.38   1.64   1.01   1.13',
+                '   0.90   2.00   0.65 -99.00 -99.00 -99.00 -99.00 -99.00 -99.00   0.06',
+                ' -99.00  -0.52',
+                '  56 Number of depth points',
+                'Model structure']
+        
+        # Skip the partial pressures
+        
 
 ###########   Atmosphere Grids  #################
 
 class KuruczGrid():
     """ Grid of Kurucz model atmospheres."""
-    
-    def __init__(self):
+
+    def __init__(self,index=None,data=None):
         # Load the data
-        kurucz_index, kurucz_data = load_kurucz_grid()
-        self.data = kurucz_data
-        self.index = kurucz_index
+        if index is None or data is None:
+            index, data = load_kurucz_grid()
+        self.data = data
+        self.index = index
         self.nmodels = len(self.index)
         self.labels = ['teff','logg','metal','alpha']
         self.ranges = np.zeros((4,2),float)
@@ -1392,7 +1801,7 @@ class KuruczGrid():
     def __getitem__(self,index):
         return self.data[index]
     
-    def __call__(self,teff,logg,metal,alpha):
+    def __call__(self,teff,logg,metal,alpha=0.0,nointerp=False,closest=False,linesonly=False):
         # Check if it is in bounds
         pars = [teff,logg,metal,alpha]
         inside = True
@@ -1401,15 +1810,33 @@ class KuruczGrid():
         if inside==False:
             raise Exception('Parameters are out of bounds')
         # Check if we have this exact model
-        ind, = np.where((abs(self.index['teff']-teff) < 1) & (abs(self.index['logg']-logg)<0.01) &
-                        (abs(self.index['metal']-metal)<0.01) & (abs(self.index['alpha']-alpha)<0.01))
-        if len(ind)>0:
-            return self.data[ind[0]]
+        if closest==False:
+            ind, = np.where((abs(self.index['teff']-teff) < 1) & (abs(self.index['logg']-logg)<0.01) &
+                            (abs(self.index['metal']-metal)<0.01) & (abs(self.index['alpha']-alpha)<0.01))
+            if len(ind)>0:
+                lines = self.data[ind[0]]
+                if linesonly:
+                    return lines
+                return KuruczAtmosphere(lines)
+        # Return closest grid point
+        else:
+            dist = np.linalg.norm([np.log10(self.index['teff'].data)-np.log10(teff),self.index['logg'].data-logg,
+                                   self.index['metal'].data-metal,self.index['alpha'].data-alpha],axis=0)
+            bestind = np.argmin(dist)
+            lines = self.data[bestind]
+            if linesonly:
+                return lines
+            return KuruczAtmosphere(lines)
+        # None found so far, and do not do interpolation
+        if nointerp:
+            return None
         # Need to interpolate
         lines = self.interpolate(teff,logg,metal,alpha)
-        return lines
+        if linesonly:
+            return lines
+        return KuruczAtmosphere(lines)
 
-    def interpolate(self,teff,logg,metal,alpha):
+    def interpolate(self,teff,logg,metal,alpha=0.0):
         """ Interpolate Kurucz model."""
         ntau = 72
         ncols = 10        
@@ -1449,6 +1876,24 @@ class KuruczGrid():
             mapmetal = 0.5
         if len(aind)==0:
             mapalpha = (alpha-am1)/(ap1-am1)
+
+        # 1) mass depth [g/cm2]
+        # 2) temperature, [K], of the layer,
+        # 3) gas pressure,  [dyne/cm2]
+        # 4) electron number density [1/cm3]
+        # 5) Rosseland mean absorption coefficient (kappa Ross) [cm2/g]
+        # 6) radiative acceleration [cm/s2]
+        # 7) microturbulent velocity in [cm/s]
+        # The newer Kurucz/Castelli models have three additional columns which give
+        # 8) amount of flux transported by convection, (FLXCNV) [ergs/s/cm2]
+        # 9) convective velocity (VCONV) [cm/s]
+        # 10) sound velocity (VELSND)  [cm/s]
+
+        # RHOX, T, P, XNE, ABROSS, ACCRAD, VTURB, FLXCNV, VCONV, VELSND
+        # 1.75437086E-02   1995.0 1.754E-02 1.300E+04 7.601E-06 1.708E-04 2.000E+05 0.000E+00 0.000E+00 1.177E+06
+        # 2.26928500E-02   1995.0 2.269E-02 1.644E+04 9.674E-06 1.805E-04 2.000E+05 0.000E+00 0.000E+00 9.849E+05
+        # 2.81685925E-02   1995.0 2.816E-02 1.999E+04 1.199E-05 1.919E-04 2.000E+05 0.000E+00 0.000E+00 8.548E+05
+        # 3.41101002E-02   1995.0 3.410E-02 2.374E+04 1.463E-05 2.043E-04 2.000E+05 0.000E+00 0.000E+00 7.602E+05
             
         # Reading the corresponding models
         tarr = [tm1,tm1,tm1,tm1, tp1,tp1,tp1,tp1]
@@ -1462,10 +1907,49 @@ class KuruczGrid():
             marr = [mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1]
             aarr = [am1,am1,am1,am1, am1,am1,am1,am1, ap1,ap1,ap1,ap1, ap1,ap1,ap1,ap1]
             npoints = 16
-        modlist = []
-        trlist = []
+        # First let's check that we have all of these models
+        #   sometimes the needed alpha node is missing
+        lineslist = []
+        missing = np.zeros(npoints,bool)
         for i in np.arange(npoints)+1:
-            lines = self(tarr[i-1],larr[i-1],marr[i-1],aarr[i-1])
+            lines = self(tarr[i-1],larr[i-1],marr[i-1],aarr[i-1],nointerp=True,linesonly=True)
+            if lines is None:
+                lineslist.append(None)
+                missing[i-1] = True                
+            else:
+                lineslist.append(lines)
+
+        # Some missing, don't interpolate alpha, use the closest value
+        if np.sum(missing)>0:
+            #warnings.warn('Missing some needed alpha information.  Only interpolating in Teff,logg and [M/H]')
+            tarr = [tm1,tm1,tm1,tm1, tp1,tp1,tp1,tp1]
+            larr = [lm1,lm1,lp1,lp1, lm1,lm1,lp1,lp1]
+            marr = [mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1]
+            am1,aind = dln.closest(self.alpha,alpha) # closest alpha point           
+            aarr = [am1,am1,am1,am1, am1,am1,am1,am1]
+            npoints = 8
+            grid = np.zeros((2,2,2),dtype=np.float64)            
+            # Get the lines data again
+            lineslist = []
+            missing = np.zeros(npoints,bool)
+            for i in np.arange(npoints)+1:
+                lines = self(tarr[i-1],larr[i-1],marr[i-1],aarr[i-1],nointerp=True,linesonly=True)
+                if lines is None:
+                    lineslist.append(None)
+                    missing[i-1] = True                
+                else:
+                    lineslist.append(lines)
+                    
+        # Still missing some points, use the closest grid point
+        if np.sum(missing)>0:
+             warnings.warn('Cannot interpolate.  Returning the closest grid point model')
+             return self(teff,logg,metal,alpha,closest=True)
+
+        # Now load all of the data
+        modlist = []
+        trlist = []                
+        for i in np.arange(npoints)+1:
+            lines = lineslist[i-1]    
             # make io.StringIO object
             iolines = io.StringIO('\n'.join(lines))
             if i==1:
@@ -1493,7 +1977,7 @@ class KuruczGrid():
         bot_tauross = min([t[ntau-1] for t in trlist])
         top_tauross = max([t[0] for t in trlist])
         g, = np.where((tauross >= top_tauross) & (tauross <= bot_tauross))
-        tauross_new = dln.interp(np.linspace(0,1,len(g)),tauross[g],np.linspace(0,1,ntau),kind='linear')
+        tauross_new = np.interp(np.linspace(0,1,ntau),np.linspace(0,1,len(g)),tauross[g])        
     
         # Let's interpolate for every depth
         points = (np.arange(2),np.arange(2),np.arange(2))
@@ -1501,39 +1985,43 @@ class KuruczGrid():
             points = (np.arange(2),np.arange(2),np.arange(2),np.arange(2))
         for i in np.arange(ntau-1)+1:
             for j in range(ncols):
+                if j==6:   # can skip the vmicro column
+                    continue
                 if len(aind)>0:
-                    grid[0,0,0] = dln.interp(trlist[0][1:],modlist[0][j,1:],tauross_new[i],kind='linear')
-                    grid[0,0,1] = dln.interp(trlist[1][1:],modlist[1][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,0] = dln.interp(trlist[2][1:],modlist[2][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,1] = dln.interp(trlist[3][1:],modlist[3][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,0] = dln.interp(trlist[4][1:],modlist[4][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,1] = dln.interp(trlist[5][1:],modlist[5][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,0] = dln.interp(trlist[6][1:],modlist[6][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,1] = dln.interp(trlist[7][1:],modlist[7][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,0] = np.interp(tauross_new[i],trlist[0][1:],modlist[0][j,1:])
+                    grid[0,0,1] = np.interp(tauross_new[i],trlist[1][1:],modlist[1][j,1:])
+                    grid[0,1,0] = np.interp(tauross_new[i],trlist[2][1:],modlist[2][j,1:])
+                    grid[0,1,1] = np.interp(tauross_new[i],trlist[3][1:],modlist[3][j,1:])
+                    grid[1,0,0] = np.interp(tauross_new[i],trlist[4][1:],modlist[4][j,1:])
+                    grid[1,0,1] = np.interp(tauross_new[i],trlist[5][1:],modlist[5][j,1:])
+                    grid[1,1,0] = np.interp(tauross_new[i],trlist[6][1:],modlist[6][j,1:])
+                    grid[1,1,1] = np.interp(tauross_new[i],trlist[7][1:],modlist[7][j,1:])
                     model[j,i] = interpn(points,grid[:,:,:],(mapteff,maplogg,mapmetal),method='linear')
-
                 else:
-                    grid[0,0,0,0] = dln.interp(trlist[0][1:],modlist[0][j,1:],tauross_new[i],kind='linear')
-                    grid[0,0,1,0] = dln.interp(trlist[1][1:],modlist[1][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,0,0] = dln.interp(trlist[2][1:],modlist[2][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,1,0] = dln.interp(trlist[3][1:],modlist[3][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,0,0] = dln.interp(trlist[4][1:],modlist[4][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,1,0] = dln.interp(trlist[5][1:],modlist[5][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,0,0] = dln.interp(trlist[6][1:],modlist[6][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,1,0] = dln.interp(trlist[7][1:],modlist[7][j,1:],tauross_new[i],kind='linear')
-                    grid[0,0,0,1] = dln.interp(trlist[8][1:],modlist[8][j,1:],tauross_new[i],kind='linear')
-                    grid[0,0,1,1] = dln.interp(trlist[9][1:],modlist[9][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,0,1] = dln.interp(trlist[10][1:],modlist[10][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,1,1] = dln.interp(trlist[11][1:],modlist[11][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,0,1] = dln.interp(trlist[12][1:],modlist[12][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,1,1] = dln.interp(trlist[13][1:],modlist[13][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,0,1] = dln.interp(trlist[14][1:],modlist[14][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,1,1] = dln.interp(trlist[15][1:],modlist[15][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,0,0] = np.interp(tauross_new[i],trlist[0][1:],modlist[0][j,1:])
+                    grid[0,0,1,0] = np.interp(tauross_new[i],trlist[1][1:],modlist[1][j,1:])
+                    grid[0,1,0,0] = np.interp(tauross_new[i],trlist[2][1:],modlist[2][j,1:])
+                    grid[0,1,1,0] = np.interp(tauross_new[i],trlist[3][1:],modlist[3][j,1:])
+                    grid[1,0,0,0] = np.interp(tauross_new[i],trlist[4][1:],modlist[4][j,1:])
+                    grid[1,0,1,0] = np.interp(tauross_new[i],trlist[5][1:],modlist[5][j,1:])
+                    grid[1,1,0,0] = np.interp(tauross_new[i],trlist[6][1:],modlist[6][j,1:])
+                    grid[1,1,1,0] = np.interp(tauross_new[i],trlist[7][1:],modlist[7][j,1:])
+                    grid[0,0,0,1] = np.interp(tauross_new[i],trlist[8][1:],modlist[8][j,1:])
+                    grid[0,0,1,1] = np.interp(tauross_new[i],trlist[9][1:],modlist[9][j,1:])
+                    grid[0,1,0,1] = np.interp(tauross_new[i],trlist[10][1:],modlist[10][j,1:])
+                    grid[0,1,1,1] = np.interp(tauross_new[i],trlist[11][1:],modlist[11][j,1:])
+                    grid[1,0,0,1] = np.interp(tauross_new[i],trlist[12][1:],modlist[12][j,1:])
+                    grid[1,0,1,1] = np.interp(tauross_new[i],trlist[13][1:],modlist[13][j,1:])
+                    grid[1,1,0,1] = np.interp(tauross_new[i],trlist[14][1:],modlist[14][j,1:])
+                    grid[1,1,1,1] = np.interp(tauross_new[i],trlist[15][1:],modlist[15][j,1:])
                     model[j,i] = interpn(points,grid[:,:,:,:],(mapteff,maplogg,mapmetal,mapalpha),method='linear')
 
         for j in range(ncols):
             model[j,0] = model[j,1]*0.999
-        
+            
+        # Vmicro
+        model[6,:] = modlist[0][6,0]
+            
         # Editing the header
         header[0] = utils.strput(header[0],'%7.0f' % teff,4)
         header[0] = utils.strput(header[0],'%8.5f' % logg,21)        
@@ -1570,16 +2058,17 @@ class KuruczGrid():
                 lines.append(tail[i])
 
         return lines
-
+    
 
 class MARCSGrid():
     """ Grid of MARCS model atmospheres."""
     
-    def __init__(self):
+    def __init__(self,index=None,data=None):
         # Load the data
-        marcs_index, marcs_data = load_marcs_grid()
-        self.data = marcs_data
-        self.index = marcs_index
+        if index is None or data is None:
+            index, data = load_marcs_grid()
+        self.data = data
+        self.index = index
         self.nmodels = len(self.index)
         self.labels = ['teff','logg','metal','alpha']
         self.ranges = np.zeros((4,2),float)
@@ -1601,8 +2090,8 @@ class MARCSGrid():
 
     def __getitem__(self,index):
         return self.data[index]
-    
-    def __call__(self,teff,logg,metal,alpha):
+
+    def __call__(self,teff,logg,metal,alpha=0.0,nointerp=False,closest=False,linesonly=False):
         # Check if it is in bounds
         pars = [teff,logg,metal,alpha]
         inside = True
@@ -1611,24 +2100,39 @@ class MARCSGrid():
         if inside==False:
             raise Exception('Parameters are out of bounds')
         # Check if we have this exact model
-        ind, = np.where((abs(self.index['teff']-teff) < 1) & (abs(self.index['logg']-logg)<0.01) &
-                        (abs(self.index['metal']-metal)<0.01) & (abs(self.index['alpha']-alpha)<0.01))
-        if len(ind)>0:
-            return self.data[ind[0]]
+        if closest==False:
+            ind, = np.where((abs(self.index['teff']-teff) < 1) & (abs(self.index['logg']-logg)<0.01) &
+                            (abs(self.index['metal']-metal)<0.01) & (abs(self.index['alpha']-alpha)<0.01))
+            if len(ind)>0:
+                lines = self.data[ind[0]]
+                if linesonly:
+                    return lines
+                return MARCSAtmosphere(lines)
+        # Return closest grid point
+        else:
+            dist = np.linalg.norm([np.log10(self.index['teff'].data)-np.log10(teff),self.index['logg'].data-logg,
+                                   self.index['metal'].data-metal,self.index['alpha'].data-alpha],axis=0)
+            bestind = np.argmin(dist)
+            lines = self.data[bestind]
+            if linesonly:
+                return lines
+            return MARCSAtmosphere(lines)
+        # None found so far, and do not do interpolation
+        if nointerp:
+            return None
         # Need to interpolate
         lines = self.interpolate(teff,logg,metal,alpha)
-        return lines
+        if linesonly:
+            return lines
+        return MARCSAtmosphere(lines)
 
-    def interpolate(self,teff,logg,metal,alpha,mtype='odfnew'):
+    def interpolate(self,teff,logg,metal,alpha=0.0):
         """ Interpolate MARCS model."""
-
-    def interpolate(self,teff,logg,metal,alpha):
-        """ Interpolate Kurucz model."""
         ntau = 56
         ncols = 14        
 
         # timing
-        #  without alpha it takes ~1.5 sec
+        #  without alpha it takes ~0.7 sec
         #  with alpha it takes ~2.8 sec
         
         # Linear Interpolation
@@ -1643,7 +2147,7 @@ class MARCSGrid():
         if len(aind)==0:
             am1 = max(self.alpha[np.where(self.alpha <= alpha)[0]])     # immediately inferior alpha
             ap1 = min(self.alpha[np.where(self.alpha >= alpha)[0]])     # immediately superior alpha
-
+            
         grid = np.zeros((2,2,2),dtype=np.float64)
         if len(aind)==0:
             grid = np.zeros((2,2,2,2),dtype=np.float64)        
@@ -1662,6 +2166,23 @@ class MARCSGrid():
             mapmetal = 0.5
         if len(aind)==0:
             mapalpha = (alpha-am1)/(ap1-am1)
+
+        # First set of columns
+        # Model structure
+        #  k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb
+        #   1 -5.00 -4.7483 -1.904E+09  4202.3  3.8181E-03  3.8593E+01  1.7233E+00  0.0000E+00
+        #   2 -4.80 -4.5555 -1.824E+09  4238.3  5.0499E-03  5.0962E+01  1.7238E+00  0.0000E+00
+        #   3 -4.60 -4.3741 -1.744E+09  4280.8  6.6866E-03  6.7097E+01  1.7245E+00  0.0000E+00
+        #   4 -4.40 -4.1988 -1.663E+09  4325.2  8.8474E-03  8.8133E+01  1.7252E+00  0.0000E+00
+        #   5 -4.20 -4.0266 -1.583E+09  4370.8  1.1686E-02  1.1542E+02  1.7262E+00  0.0000E+00
+
+        # Second set of columns
+        # k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX
+        #  1 -5.00  4.2674E-04  1.3996E-10 1.257  0.000E+00 0.00000  4.031597E-02
+        #  2 -4.80  5.1413E-04  1.8324E-10 1.257  0.000E+00 0.00000  5.268627E-02
+        #  3 -4.60  6.2317E-04  2.3886E-10 1.257  0.000E+00 0.00000  6.882111E-02
+        #  4 -4.40  7.5997E-04  3.1053E-10 1.257  0.000E+00 0.00000  8.985844E-02
+        #  5 -4.20  9.3110E-04  4.0241E-10 1.257  0.000E+00 0.00000  1.171414E-01
             
         # Reading the corresponding models
         tarr = [tm1,tm1,tm1,tm1, tp1,tp1,tp1,tp1]
@@ -1675,10 +2196,49 @@ class MARCSGrid():
             marr = [mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1]
             aarr = [am1,am1,am1,am1, am1,am1,am1,am1, ap1,ap1,ap1,ap1, ap1,ap1,ap1,ap1]
             npoints = 16
-        modlist = []
-        trlist = []
+        # First let's check that we have all of these models
+        #   sometimes the needed alpha node is missing
+        lineslist = []
+        missing = np.zeros(npoints,bool)
         for i in np.arange(npoints)+1:
-            lines = self(tarr[i-1],larr[i-1],marr[i-1],aarr[i-1])
+            lines = self(tarr[i-1],larr[i-1],marr[i-1],aarr[i-1],nointerp=True,linesonly=True)
+            if lines is None:
+                lineslist.append(None)
+                missing[i-1] = True                
+            else:
+                lineslist.append(lines)
+                
+        # Some missing, don't interpolate alpha, use the closest value
+        if np.sum(missing)>0:
+            #warnings.warn('Missing some needed alpha information.  Only interpolating in Teff,logg and [M/H]')
+            tarr = [tm1,tm1,tm1,tm1, tp1,tp1,tp1,tp1]
+            larr = [lm1,lm1,lp1,lp1, lm1,lm1,lp1,lp1]
+            marr = [mm1,mp1,mm1,mp1, mm1,mp1,mm1,mp1]
+            am1,aind = dln.closest(self.alpha,alpha) # closest alpha point           
+            aarr = [am1,am1,am1,am1, am1,am1,am1,am1]
+            npoints = 8
+            grid = np.zeros((2,2,2),dtype=np.float64)            
+            # Get the lines data again
+            lineslist = []
+            missing = np.zeros(npoints,bool)
+            for i in np.arange(npoints)+1:
+                lines = self(tarr[i-1],larr[i-1],marr[i-1],aarr[i-1],nointerp=True,linesonly=True)
+                if lines is None:
+                    lineslist.append(None)
+                    missing[i-1] = True                
+                else:
+                    lineslist.append(lines)
+            
+        # Still missing some points, use the closest grid point
+        if np.sum(missing)>0:
+             warnings.warn('Cannot interpolate.  Returning the closest grid point model')
+             return self(teff,logg,metal,alpha,closest=True)
+
+        # Now load all of the data
+        modlist = []
+        trlist = []                
+        for i in np.arange(npoints)+1:
+            lines = lineslist[i-1]                
             # make io.StringIO object
             iolines = io.StringIO('\n'.join(lines))
             if i==1:
@@ -1687,103 +2247,109 @@ class MARCSGrid():
                 model,h,t,ab,tl = read_marcs_model(iolines)
             # Need to transpose the data, want [Ncols,Ntau]
             model = model.T
-
-            import pdb; pdb.set_trace()
             
 	    # Getting the tauross scale
-            rhox = model[0,:]
-            kappaross = model[4,:]
-            tauross = np.zeros(ntau,dtype=np.float64)
-            tauross[0] = rhox[0]*kappaross[0]
-            for ii in np.arange(ntau-1)+1:
-                tauross[ii] = utils.trapz(rhox[0:ii+1],kappaross[0:ii+1])
-
+            rhox = model[13,:]         # rhox
+            kappaross = model[8,:]     # kappaross
+            tauross = 10**model[0,:]      # log tau Ross
+            #tauross = np.zeros(ntau,dtype=np.float64)
+            #tauross[0] = rhox[0]*kappaross[0]
+            #for ii in np.arange(ntau-1)+1:
+            #    tauross[ii] = utils.trapz(rhox[0:ii+1],kappaross[0:ii+1])
+                
             modlist.append(model)
             trlist.append(tauross)
 
         model = np.zeros((ncols,ntau),dtype=np.float64)  # cleaning up for re-using the matrix
 
+
         # Defining the mass (RHOX#gr cm-2) sampling 
         tauross = trlist[0]       # re-using the vector tauross
-        bot_tauross = min([t[ntau-1] for t in trlist])
-        top_tauross = max([t[0] for t in trlist])
-        g, = np.where((tauross >= top_tauross) & (tauross <= bot_tauross))
-        tauross_new = dln.interp(np.linspace(0,1,len(g)),tauross[g],np.linspace(0,1,ntau),kind='linear')
-    
+        #bot_tauross = min([t[-1] for t in trlist])
+        #top_tauross = max([t[0] for t in trlist])
+        #g, = np.where((tauross >= top_tauross) & (tauross <= bot_tauross))
+        #tauross_new = np.interp(np.linspace(0,1,ntau),np.linspace(0,1,len(g)),tauross[g])
+        tauross_new = tauross
+        # log Tau Ross is always -5.00 to +2.00 in the MARCS atmospheres
+
+        
         # Let's interpolate for every depth
         points = (np.arange(2),np.arange(2),np.arange(2))
-        if len(aind)==0:
+        if npoints==16:
             points = (np.arange(2),np.arange(2),np.arange(2),np.arange(2))
-        for i in np.arange(ntau-1)+1:
+        for i in np.arange(ntau):
             for j in range(ncols):
-                if len(aind)>0:
-                    grid[0,0,0] = dln.interp(trlist[0][1:],modlist[0][j,1:],tauross_new[i],kind='linear')
-                    grid[0,0,1] = dln.interp(trlist[1][1:],modlist[1][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,0] = dln.interp(trlist[2][1:],modlist[2][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,1] = dln.interp(trlist[3][1:],modlist[3][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,0] = dln.interp(trlist[4][1:],modlist[4][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,1] = dln.interp(trlist[5][1:],modlist[5][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,0] = dln.interp(trlist[6][1:],modlist[6][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,1] = dln.interp(trlist[7][1:],modlist[7][j,1:],tauross_new[i],kind='linear')
+                if j==0:  # tauross
+                    continue
+                if npoints==8:
+                    grid[0,0,0] = modlist[0][j,i]
+                    grid[0,0,1] = modlist[1][j,i]
+                    grid[0,1,0] = modlist[2][j,i]
+                    grid[0,1,1] = modlist[3][j,i]
+                    grid[1,0,0] = modlist[4][j,i]
+                    grid[1,0,1] = modlist[5][j,i]
+                    grid[1,1,0] = modlist[6][j,i]
+                    grid[1,1,1] = modlist[7][j,i]
                     model[j,i] = interpn(points,grid[:,:,:],(mapteff,maplogg,mapmetal),method='linear')
-
                 else:
-                    grid[0,0,0,0] = dln.interp(trlist[0][1:],modlist[0][j,1:],tauross_new[i],kind='linear')
-                    grid[0,0,1,0] = dln.interp(trlist[1][1:],modlist[1][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,0,0] = dln.interp(trlist[2][1:],modlist[2][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,1,0] = dln.interp(trlist[3][1:],modlist[3][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,0,0] = dln.interp(trlist[4][1:],modlist[4][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,1,0] = dln.interp(trlist[5][1:],modlist[5][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,0,0] = dln.interp(trlist[6][1:],modlist[6][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,1,0] = dln.interp(trlist[7][1:],modlist[7][j,1:],tauross_new[i],kind='linear')
-                    grid[0,0,0,1] = dln.interp(trlist[8][1:],modlist[8][j,1:],tauross_new[i],kind='linear')
-                    grid[0,0,1,1] = dln.interp(trlist[9][1:],modlist[9][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,0,1] = dln.interp(trlist[10][1:],modlist[10][j,1:],tauross_new[i],kind='linear')
-                    grid[0,1,1,1] = dln.interp(trlist[11][1:],modlist[11][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,0,1] = dln.interp(trlist[12][1:],modlist[12][j,1:],tauross_new[i],kind='linear')
-                    grid[1,0,1,1] = dln.interp(trlist[13][1:],modlist[13][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,0,1] = dln.interp(trlist[14][1:],modlist[14][j,1:],tauross_new[i],kind='linear')
-                    grid[1,1,1,1] = dln.interp(trlist[15][1:],modlist[15][j,1:],tauross_new[i],kind='linear')
+                    grid[0,0,0,0] = modlist[0][j,i]
+                    grid[0,0,1,0] = modlist[1][j,i]
+                    grid[0,1,0,0] = modlist[2][j,i]
+                    grid[0,1,1,0] = modlist[3][j,i]
+                    grid[1,0,0,0] = modlist[4][j,i]
+                    grid[1,0,1,0] = modlist[5][j,i]
+                    grid[1,1,0,0] = modlist[6][j,i]
+                    grid[1,1,1,0] = modlist[7][j,i]
+                    grid[0,0,0,1] = modlist[8][j,i]
+                    grid[0,0,1,1] = modlist[9][j,i]
+                    grid[0,1,0,1] = modlist[10][j,i]
+                    grid[0,1,1,1] = modlist[11][j,i]
+                    grid[1,0,0,1] = modlist[12][j,i]
+                    grid[1,0,1,1] = modlist[13][j,i]
+                    grid[1,1,0,1] = modlist[14][j,i]
+                    grid[1,1,1,1] = modlist[15][j,i]
                     model[j,i] = interpn(points,grid[:,:,:,:],(mapteff,maplogg,mapmetal,mapalpha),method='linear')
+        model[0,:] = np.log10(tauross)
 
-        for j in range(ncols):
-            model[j,0] = model[j,1]*0.999
-        
+        # NOTE: The partial pressures are NOT interpolated
+            
         # Editing the header
-        header[0] = utils.strput(header[0],'%7.0f' % teff,4)
-        header[0] = utils.strput(header[0],'%8.5f' % logg,21)        
-        tmpstr1 = header[1]
-        tmpstr2 = header[4]
-        if (metal < 0.0):
-            if type == 'old':
-                header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),18)
-            else:
-                header[1] = utils.strput(header[1],'-%3.1f' % abs(metal),8)
-            header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)
-        else:
-            if type == 'old':
-                header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),18)
-            else:
-                header[1] = utils.strput(header[1],'+%3.1f' % abs(metal),8)
-                header[4] = utils.strput(header[4],'%9.5f' % 10**metal,16)            
-        header[22] = utils.strput(header[22],'%2i' % ntau,11)
+        header[1] = '{:6d}. {:s}'.format(int(teff),header[1][8:])     # change Teff
+        header[3] = '{:12.4E} {:s}'.format(10**logg,header[3][13:])   # change logg
+        smetal = '{:+6.2f}'.format(metal)
+        salpha = '{:+6.2f}'.format(alpha)
+        header[6] = smetal+salpha+header[6][12:]                      # change metal and alpha
 
-        # Now put it all together
-        lines = []
-        for i in range(len(header)):
-            lines.append(header[i])
-        if type == 'old':
-            for i in range(ntau):
-                lines.append('%15.8E %8.1f %9.3E %9.3E %9.3E %9.3E %9.3E' % tuple(model[:,i]))
-        else:
-            for i in range(ntau):
-                lines.append('%15.8E %8.1f %9.3E %9.3E %9.3E %9.3E %9.3E %9.3E %9.3E %9.3E' % tuple(model[:,i]))
-        for i in range(len(tail)):
-            if i!= len(tail)-1:
-                lines.append(tail[i])
-            else:
-                lines.append(tail[i])
+        # We should also edit the abundances for the correct metallicity and alpha
+        
+        # First set of columns
+        # Model structure
+        #  k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb
+        #   1 -5.00 -4.3387 -2.222E+11  3935.2  9.4190E-05  8.3731E-01  1.5817E+00  0.0000E+00
+        #fmt = '(I3,F6.2,F8.4,F11.3,F8.1,F12.4,F12.4,F12.4,F12.4)'
+        data = model.T
+        datalines = []
+        datalines.append(' k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb')
+        for i in range(ntau):
+            fmt = '{0:3d}{1:6.2f}{2:8.4f}{3:11.3E}{4:8.1f}{5:12.4E}{6:12.4E}{7:12.4E}{8:12.4E}'
+            newline = fmt.format(i+1,data[i,0],data[i,1],data[i,2],data[i,3],data[i,4],data[i,5],data[i,6],data[i,7])
+            datalines.append(newline)
 
+        # Second set of columns
+        # k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX
+        #  1 -5.00  1.0979E-04  3.2425E-12 1.267  0.000E+00 0.00000  2.841917E-01
+        #fmt = '(I3,F6.2,F12.4,F12.4,F6.3,F11.3,F8.4,F14.4)'            
+        datalines.append(' k lgTauR    KappaRoss   Density   Mu      Vconv   Fconv/F      RHOX')
+        for i in range(ntau):
+            fmt = '{0:3d}{1:6.2f}{2:12.4E}{3:12.4E}{4:6.3f}{5:11.3E}{6:8.5f}{7:14.6E}'
+            newline = fmt.format(i+1,data[i,0],data[i,8],data[i,9],data[i,10],data[i,11],data[i,12],data[i,13])
+            datalines.append(newline)
+
+        if tail[-1]=='':
+            tail = tail[:-1]
+            
+        lines = header + datalines + tail
+                
         return lines
     
     
@@ -1988,7 +2554,7 @@ def read_marcs_model2(modelfile):
 
   t = [ float(entries[4]) ]
   p = [ float(entries[6]) ]
-  ne = [ float(entries[5]) / bolk / float(entries[4]) ] 
+  ne = [ float(entries[5]) / kboltz / float(entries[4]) ] 
 
   for i in range(nd-1):
     line = f.readline()
@@ -1996,7 +2562,7 @@ def read_marcs_model2(modelfile):
 
     t.append(  float(entries[4]))
     p.append(  float(entries[6]))
-    ne.append( float(entries[5]) / bolk / float(entries[4]))
+    ne.append( float(entries[5]) / kboltz / float(entries[4]))
 
   line = f.readline()
   line = f.readline()
@@ -2409,7 +2975,7 @@ def read_phoenix_model(modelfile):
   atmos['dm'] = f['pgas'] / 10.**logg
   atmos['t'] = f['temp']
   atmos['p'] = f['pgas']
-  atmos['ne'] = f['pe']/ bolk / f['temp']
+  atmos['ne'] = f['pe']/ kboltz / f['temp']
 
   return (teff,logg,vmicro,abu,nd,atmos)
 
@@ -2505,7 +3071,7 @@ def read_phoenix_text_model(modelfile):
 
   t = [ float(entries[2].replace('D','E')) ]
   p = [ float(entries[3].replace('D','E')) ]
-  ne = [ float(entries[4].replace('D','E')) / bolk / float(entries[2].replace('D','E')) ] 
+  ne = [ float(entries[4].replace('D','E')) / kboltz / float(entries[2].replace('D','E')) ] 
   dm = [ float(entries[3].replace('D','E')) / 10.**logg ] #assuming hydrostatic equil. and negliglible radiation and turb. pressure
 
   for i in range(nd-1):
@@ -2514,7 +3080,7 @@ def read_phoenix_text_model(modelfile):
 
     t.append(  float(entries[2].replace('D','E')))
     p.append(  float(entries[3].replace('D','E')))
-    ne.append( float(entries[4].replace('D','E')) / bolk / float(entries[2]))
+    ne.append( float(entries[4].replace('D','E')) / kboltz / float(entries[2]))
     dm.append ( float(entries[3].replace('D','E')) / 10.**logg )
 
   vmicro = 0.0
