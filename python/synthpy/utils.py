@@ -1,5 +1,7 @@
 import os
+import time
 import numpy as np
+import gdown
 
 def atmosdir():
     """ Return the model atmospheres directory."""
@@ -426,3 +428,44 @@ def trapz(x,y):
     return trapz
 
 
+def download_linelists(lineset='all'):
+    """ Download the various linelists from my Google Drive."""
+
+    synspec = [{'id':'1Mj8ys35-TEKIwMDcDb0OvEVvl8slUwdt', 'output':'H2O-8.synspec.gz'},
+               {'id':'11et8gt83Ij0i5M3TKMqPxwYl4JHGA9od', 'output':'gfTiO.synspec.gz'},
+               {'id':'11hFhkc5Cqdvo54EqpfcJyWHL4sRy42h6', 'output':'gfMOLsun.synspec.gz'},
+               {'id':'1xWQW7qMyqUx8Cx2tjeJYfechbxVMP4IA', 'output':'gfATO.synspec.gz'}]
+
+    moog = [{'id':'1UH-7rQHDMoF2P7LHdVB5WrQHQWQ7yZsy', 'output':'H2O-8.moog.gz'},
+            {'id':'1S9q-OOBed6kBHMSGxdjx4rXQGigAaWcg', 'output':'gfTiO.moog.gz'},
+            {'id':'1QnCXqZdBVlde2cQ9l2G_a1488UKTG17c', 'output':'gfMOLsun.moog.gz'},
+            {'id':'17goVSZtiyI8cktxVWdCVCpsB82acgaZg', 'output':'gfATO.moog.gz'}]
+
+    turbo = [{'id':'1eiAf7DECYbYEHwORk3DrH6JobxFbtXYt', 'output':'H2O-8.turbo.gz'},
+             {'id':'1eT6QpA0Vj62uGTgPLtUJLKbKnNgfxFnT', 'output':'gfTiO.turbo.gz'},
+             {'id':'1YIwuI0B2YnT6wtZnkKSvkQQveEWSsQSg', 'output':'gfMOLsun.turbo.gz'},
+             {'id':'1INp5D33tlXrp_e1PE0bgoeopgBKSn3mG', 'output':'gfATO.turbo.gz'}]    
+
+    # Options
+    if lineset=='all':
+        filelist = synspec + moog + turbo
+    elif lineset.lower()=='synspec':
+        filelist = synspec
+    elif linelist.lower()=='moog':
+        filelist = moog
+    elif lineset.lower()[0:5]=='turbo':
+        filelist = turbo
+    else:
+        raise Exception(lineset+' NOT supported')
+
+    # Do the downloading
+    t0 = time.time()
+    print('Downloading '+str(len(filelist))+' linelist files')
+    for i in range(len(filelist)):
+        print(str(i+1)+' '+filelist[i]['output'])
+        fileid = filelist[i]['id']
+        url = f'https://drive.google.com/uc?id={fileid}'
+        output = datadir()+filelist[i]['output']  # save to the data directory
+        gdown.download(url, output, quiet=False)
+
+    print('All done in {:.1f} seconds'.format(time.time()-t0))
