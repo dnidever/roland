@@ -15,6 +15,7 @@ __version__ = '20211205'  # yyyymmdd
 import io
 import os
 import gzip
+import copy
 import numpy as np
 import warnings
 import tempfile
@@ -38,6 +39,12 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 kboltz = 1.38054e-16  # erg/ K
 cspeed = 2.99792458e5  # speed of light in km/s
+cspeedcgs = cspeed * 1e5  # cm/s
+sigmasb = 5.67051e-5  # erg/cm2/K4/s, stefan boltzmann constant
+arad = 7.5646e-15  # erg/cm3/K4, radiation constant
+luminosity_sun = 3.9e33  # erg/s
+mH = 1.6733e-24   # g, Hydrogen mass
+Rcgs = 8.314e7    # erg/mol/K, gas constant, cgs
 
 ## Load the MARCS grid data and index
 #marcs_index,marcs_data = load_marcs_grid()
@@ -308,6 +315,11 @@ def make_kurucz_header(params,ndepths=72,abund=None,vmicro=2.0,YHe=0.07834):
     # 2.81685925E-02   1995.0 2.816E-02 1.999E+04 1.199E-05 1.919E-04 2.000E+05 0.000E+00 0.000E+00 8.548E+05
     # 3.41101002E-02   1995.0 3.410E-02 2.374E+04 1.463E-05 2.043E-04 2.000E+05 0.000E+00 0.000E+00 7.602E+05
 
+    # Castelli+Kurucz use Grevesse+Sauval (1998) solar abundance values
+    # He - Xe values
+    # [X, -1.07, -10.90, -10.60, -9.45, -3.48, -4.08, -3.17, -3.92, -4.67,
+    #  -5.60, -8.83, -6.98, -4.50, -8.59, -8.69, -9.03, -10.23, -9.83]
+    
     teff = params[0]
     logg = params[1]
     metal = params[2]
@@ -576,6 +588,9 @@ def make_marcs_header(params,ndepths=56,abund=None,vmicro=2.0,YHe=0.07834):
     # -99.00  -0.52
     #  56 Number of depth points
 
+    # MARCS uses Grevesse+2007 solar abundance values but with CNO abundances from Grevesse+Sauval (2008)
+    #  which are 0.2 dex higher,  C=8.39, N=7.78, O=8.66
+    
     teff = params[0]
     logg = params[1]
     metal = params[2]
@@ -605,16 +620,29 @@ def make_marcs_header(params,ndepths=56,abund=None,vmicro=2.0,YHe=0.07834):
     # [M/H]=+0.00  0.73826 0.24954 1.22E-02 are X, Y and Z, 12C/13C=89 (=solar)
     # [M/H]=-1.00  0.74646 0.25231 1.23E-03 are X, Y and Z, 12C/13C=89 (=solar)
     # [M/H]=-2.50  0.74735 0.25261 3.91E-05 are X, Y and Z, 12C/13C=89 (=solar)
-        
+
+    # Mass is always 1.0 solar mass
+    # g = G*M/R**2
+    # R = sqrt(G*M/g)
+    G = 6.67259e-8  # cm3/g/s2
+    solarmass = 1.99e33   # g
+    radius = np.sqrt(G*1.0*solarmass/10**logg)
+
+    # Flux
+    flux = sigmasb * teff**4
+    
+    # Luminosity
+    luminosity = 4*np.pi*radius**2*sigmasb*teff**4 / luminosity_sun
+    
     header = ['s{:d}_g{:+3.1}_z{:+4.2f}_a{:+4.2f}'.format(int(teff),logg,metal,alpha),
               '  {:d}.      Teff [K] f'.format(int(teff)),
-              '  7.3488E+10 Flux [erg/cm2/s]',
+              '  {:10.4E} Flux [erg/cm2/s]'.format(flux),
               '  {:10.4E} Surface gravity [cm/s2]'.format(10**logg),
               '  {:3.1f}        Microturbulence parameter [km/s]'.format(vmicro),
               '  1.0        Mass [Msun]',
-              ' {:+4.1f} {:+4.1f} Metallicity [Fe/H] and [alpha/Fe]'.format(metal,alpha),
-              '  3.6526E+11 Radius [cm] at Tau(Rosseland)=1.0',
-              '    32.26405 Luminosity [Lsun]',
+              ' {:+4.2f} {:+4.2f} Metallicity [Fe/H] and [alpha/Fe]'.format(metal,alpha),
+              '  {:10.4E} Radius [cm] at Tau(Rosseland)=1.0'.format(radius),
+              '    {:.5f} Luminosity [Lsun]'.format(luminosity),
               '  1.50 8.00 0.076 0.00 are the convection parameters: alpha, nu, y and beta',
               '  {:7.5f} {:7.5f} {:8.2E} are X, Y and Z, 12C/13C=89 (=solar)'.format(X,Y,Z),
               'Logarithmic chemical number abundances, H always 12.00']
@@ -1050,8 +1078,22 @@ class Atmosphere(object):
             else:
                 raise IndexError(index+' not found')
         else:
-            return self.data[index]
-    
+            # Slice desired, return a trimmed model
+            if type(index) is slice:
+                newmodel = self.__class__(self.data[index].copy(),self.header.copy(),self.params.copy(),
+                                          self.labels.copy(),self.abu.copy(),copy.deepcopy(self.tail))
+                # copy _tauross if it exists
+                if hasattr(self,'_tauross') and getattr(self,'_tauross') is not None:
+                    newmodel._tauross = self._tauross[index].copy()
+                return newmodel
+            # Probably a single layer, just return the data
+            else:
+                return self.data[index]
+
+    def __array__(self):
+        """ Return the data."""
+        return self.data
+            
     @property
     def teff(self):
         """ Return temperature.  Must be defined by the subclass."""
@@ -1385,12 +1427,15 @@ class KuruczAtmosphere(Atmosphere):
 
         # Total number density
         numdensity = gasnumdensity + self.edensity
-        
-        # mean molecular weight is often 1.22-1.25
+
+        # Mean molecular weight
+        #  mean molecular weight = Sum(N(X)*massx)/Sum(N(X)
+        #  it's often around 1.22-1.25        
         sym,amass,_ = utils.elements()
         mnmolecularweight = np.sum(np.array(amass)*np.array(self.abu))/np.sum(self.abu)
 
-        # Get density, rho = n * mu * mH
+        # Get mass density, rho = n * mu * mH
+        #  n = rho / mu,  mean molecular weight (pg.291 in C+O)        
         mH = 1.6733e-24   # g
         density = numdensity * mnmolecularweight * mH
 
@@ -1415,12 +1460,25 @@ class KuruczAtmosphere(Atmosphere):
         # Maybe I need to divide the
         # How do I know that the TOTAL FLUX is??
         # I think it's just sigma*T**4
-        sigmasb = 5.67051e-5  # erg/cm2/K4/s, stefan boltzmann constant
-        flux = sigma*self.temperature**4
-        frconvflux = self.fluxconv / flux
+        #flux = sigmasb*self.temperature**4
+        #frconvflux = self.fluxconv / flux
 
         # when the fluxconv value are LOW, then they seem close to the MARCS values
         # but when fluxconv values are HUGE, then the flux values I calculate are still too large
+        if np.max(self.fluxconv) > 1:
+            frfluxconv = self.fluxconv / np.max(self.fluxconv)
+        else:
+            frfluxconv = self.fluxconv
+        
+
+        # Electron pressure
+        #  Convert electron number density [1/cm3] to pressure, P = n*k_B*T
+        epressure = self.edensity*kboltz*self.temperature
+        
+        #  Radiation pressure, Prad = 1/3 * a * T^4  (10.19 in C+O)
+        #  a = radiation constant = 4sigma/c = 7.565767e-16 J/m3/K4
+        #    = 7.5646e-15 erg/cm3/K4
+        radpressure = arad * self.temperature**4
         
         # Interpolate tauross
         tauross = self.tauross
@@ -1444,86 +1502,59 @@ class KuruczAtmosphere(Atmosphere):
             tauross_new = 10**np.linspace(np.log10(top_tauross),np.log10(bot_tauross),ntau,endpoint=True)
         
         # Need to interpolate in tauross
-        model = np.zeros((ntau,ncols),float)
+        data = np.zeros((ntau,ncols),float)
         # Interpolate log Tau Ross
-        model[:,0] = np.log10(tauross_new)                          # looks good
-        # Interpolate log Tau 500nm
-        model[:,1] = np.log10(tauross_new)  # ???
+        data[:,0] = np.log10(tauross_new)                          # looks good
+        # Interpolate log Tau 5000 A
+        data[:,1] = np.log10(tauross_new)  # ???
         # Interpolate depth in cm
         #   depth is 0.0 at tauross=1.0
-        model[:,2] = np.interp(tauross_new,tauross,depth)           # looks good
+        data[:,2] = np.interp(tauross_new,tauross,depth)           # looks good
         # Interpolate temperature
-        model[:,3] = np.interp(tauross_new,tauross,self.temperature)  # looks good
+        data[:,3] = np.interp(tauross_new,tauross,self.temperature)  # looks good
         # Interpolate electron pressure
-        #  Convert electron number density [1/cm3] to pressure, P = n*k_B*T
-        epressure = self.edensity*kboltz*self.temperature
-        model[:,4] = np.interp(tauross_new,tauross,epressure)         # looks good
+        data[:,4] = np.interp(tauross_new,tauross,epressure)         # looks good
         # Interpolate gas pressure
-        model[:,5] = np.interp(tauross_new,tauross,self.pressure)   # looks good
+        data[:,5] = np.interp(tauross_new,tauross,self.pressure)   # looks good
         # Interpolate radiation pressure
-        #  Radiation pressure, Prad = 1/3 * a * T^4  (10.19 in C+O)
-        #  a = radiation constant = 4sigma/c = 7.565767e-16 J/m3/K4
-        #    = 7.5646e-15 erg/cm3/K4 
-        radpressure = 7.5646e-15 * self.temperature**4
-        model[:,6] = np.interp(tauross_new,tauross,radpressure)     # not great
+        data[:,6] = np.interp(tauross_new,tauross,radpressure)     # not great
         # Interpolate turbulence pressure
-        model[:,7] = 0.0                                            # seems to be always zero
+        data[:,7] = 0.0                                            # seems to be always zero
         # Interpolate kappa ross
-        model[:,8] = np.interp(tauross_new,tauross,self.kappaross)  # looks good
+        data[:,8] = np.interp(tauross_new,tauross,self.kappaross)  # looks good
         # Interpolate density
-        #  difference in Tau between layers is
-        #  delta_tau = Integral{kappa*density}ds ~ kappa * density * s
-        #  so we can probably get density from delta_Tau and Kappa
-        model[:,9] = np.interp(tauross_new,tauross,density)        # looks good
+        data[:,9] = np.interp(tauross_new,tauross,density)        # looks good
         # Interpolate mean molecular weight
         #  n = rho / mu,  mean molecular weight (pg.291 in C+O)
-        model[:,10] = mnmolecularweight                            # looks good
+        data[:,10] = mnmolecularweight                            # looks good
         # Interpolate convection velocity
-        model[:,11] = np.interp(tauross_new,tauross,self.velconv)  # looks good
+        data[:,11] = np.interp(tauross_new,tauross,self.velconv)  # looks good
         # Interpolate fraction of convection flux
-        model[:,12] = np.interp(tauross_new,tauross,self.fluxconv)   # ??
+        data[:,12] = np.interp(tauross_new,tauross,frfluxconv)
         # Interpolate RHOX 
-        model[:,13] = np.interp(tauross_new,tauross,self.dmass)    # looks good
+        data[:,13] = np.interp(tauross_new,tauross,self.dmass)    # looks good
 
 
 
-        # surface gravity = 
-        
-        # 1 dyn = g cm/s2
-        
         # difference in Tau between layers is
         # Integral{kappa*density}ds
         # so we can probably get density from delta_Tau and Kappa
 
-        # n = rho / mu,  mean molecular weight (pg.291 in C+O)
-        
-        # sound velocity = sqrt(gamma*R*T/M)
-        # gamma = adiabatic constant, depends on the constant (1.4 for air)
-        #   gamma = Cp/Cv, ratio of specific heats at constant pressure and volume
-        #   for monatomic gas gamma=5/3
-        #    Cp = Cv + nR
-        # R = gas constant, 8.314 J/mol K
-        # T = temperature [K]
-        # M = molecular mass of gas [kg/mol]
-
-        # v_sound = sqrt(gamma*P/rho) (10.84 in C+O)
-        # gamma = adiabatic constant, depends on the constant (1.4 for air)
-        #   gamma = Cp/Cv, ratio of specific heats at constant pressure and volume
-        #   for monatomic gas gamma=5/3
-        #    Cp = Cv + nR
-        
-        # Radiation pressure, Prad = 1/3 * a * T^4  (10.19 in C+O)
-        # a = radiation constant = 4sigma/c = 7.565767e-16 J/m3/K4
-        
-        
-        import pdb; pdb.set_trace()
-
-        # MARCS have H=12.0 and the linear values have N(H)=1.0
+        # MARCS has H=12.0 and the linear values have N(H)=1.0
         # to convert from Kurucz linear abundances to MARCS linear abundances,
         # I think we just need to divide every thing by abu[0]
-        newheader = make_marcs_header([teff,logg,metal,alpha],ndepths=ntau,abund=abu)
+        newabu = self.abu.copy()
+        newabu[2:] *= newabu[0]   # convert N(X)/N(H) -> N(X)/N(tot)
+        newabu[0] = 1.0           # H is always 12.0
+        # lowest values in header are -99.0
+        bd, = np.where(newabu < 1e-20)
+        if len(bd)>0:
+            newabu[bd] = 1e-111
+        newheader = make_marcs_header(self.params[0:4],ndepths=ntau,abund=newabu)
         
         # Skip the partial pressures
+
+        return MARCSAtmosphere(data,newheader,self.params.copy(),self.labels.copy(),abu=list(newabu))
         
 
 class MARCSAtmosphere(Atmosphere):
@@ -1759,40 +1790,25 @@ class MARCSAtmosphere(Atmosphere):
         # 9) convective velocity (VCONV) [cm/s]
         # 10) sound velocity (VELSND)  [cm/s]
         # RHOX, T, P, XNE, ABROSS, ACCRAD, VTURB, FLXCNV, VCONV, VELSND
-        ntau = 72
+        #ntau = 56  # 72
         ncols = 10 
 
         # Interpolate tauross
+        # Kurucz/ATLAS uses log tauross from -6.875 to +2.0 in steps of 0.125
         tauross = self.tauross
-        tauross_new = np.linspace(tauross[0],tauross[-1],ntau)
+        bot_tauross = min([tauross[-1],100.0])
+        top_tauross = max([tauross[0],1.33352143e-07])
+        kurucz_tauross = 10**(np.arange(72)*0.125-6.875)
+        gdtau, = np.where((kurucz_tauross >= top_tauross) & (kurucz_tauross <= bot_tauross))
+        tauross_new = kurucz_tauross[gdtau]
+        ntau = len(tauross_new)
+        #tauross_new = 10**np.linspace(np.log10(top_tauross),np.log10(bot_tauross),ntau)
 
-        # Kurucz tauross goes from -6.875 to +2.00, while
-        # MARCS tauross goes from -5.0 to +2.00
+        # Kurucz log tauross goes from -6.875 to +2.00, while
+        # MARCS log tauross goes from -5.0 to +2.00
         # we need to extrapolate to get the Kurucz layers
-        
-        # Need to interpolate in tauross
-        model = np.zeros((ntau,ncols),float)
-        # Interpolate RHOX
-        model[:,0] = np.interp(tauross_new,tauross,self.dmass)
-        # Interpolate Temperature
-        model[:,1] = np.interp(tauross_new,tauross,self.temperature)
-        # Interpolate gas pressure
-        model[:,2] = np.interp(tauross_new,tauross,self.gaspressure)
-        # Interpolate electron number density
-        #  Convert electron pressure to electron number density, P = n*k_B*T
-        edensity = self.epressure/(kboltz*self.temperature)
-        model[:,3] = np.interp(tauross_new,tauross,edensity)        
-        # Interpolate Kappa Ross
-        model[:,4] = np.interp(tauross_new,tauross,self.kappaross)
-        # Interpolate radiative acceleration
-        #model[:,5] = np.interp(tauross_new,tauross,self.data[:,X])                
-        # can insert in vmicro/vturb right away
-        model[:,6] = self.vmicro * 1e5  # convert from km/s to cm/s        
-        # Interpolate flux transported by convection
-        #model[:,7] = np.interp(tauross_new,tauross,self.data[:,X])
-        # Interpolate convective velocity
-        model[:,8] = np.interp(tauross_new,tauross,self.data[:,11])
-        # Interpolate sound velocity
+        # just trim it
+
         #  v_sound = sqrt(gamma*P/rho) (10.84 in C+O)
         #  gamma = adiabatic constant, depends on the constant (1.4 for air)
         #    gamma = Cp/Cv, ratio of specific heats at constant pressure and volume
@@ -1801,91 +1817,96 @@ class MARCSAtmosphere(Atmosphere):
         #     gamma = Cp/Cv = (Cv+nR)/Cv = 1+nR/Cv
         gamma = 5/3   # assume ideal monatomic gas
         velsound = np.sqrt(gamma*self.gaspressure/self.density)
-        model[:,9] = np.interp(tauross_new,tauross,velsound)
 
-        # difference in Tau between layers is
-        # Integral{kappa*density}ds
-        # so we can probably get density from delta_Tau and Kappa
+        #  Radiation pressure, Prad = 1/3 * a * T^4  (10.19 in C+O)
+        #  a = radiation constant = 4sigma/c = 7.565767e-16 J/m3/K4
+        #    = 7.5646e-15 erg/cm3/K4
+        radpressure = arad * self.temperature**4   # dyn/cm2
+        
+        # radiative acceleration [cm/s2]
+        #  the radiative acceleration g_rad due to the absorption of radiation
 
-        # n = rho / mu,  mean molecular weight (pg.291 in C+O)
-        
-        # sound velocity = sqrt(gamma*R*T/M)
-        # gamma = adiabatic constant, depends on the constant (1.4 for air)
-        #   gamma = Cp/Cv, ratio of specific heats at constant pressure and volume
-        #   for monatomic gas gamma=5/3
-        #    Cp = Cv + nR
-        # R = gas constant, 8.314 J/mol K
-        # T = temperature [K]
-        # M = molecular mass of gas [kg/mol]
+        # Hui-Bon-Hoa+2002, equation 1
+        # g_rad(A) = 4*pi/c * 1/X_A * Integral(opacity_lambda(A) * Flux_lambda dlambda)
+        #  where X_A is the mass fraction of ion A
+        # g = 4*pi/c * 1/X_A * opacity(A)*Flux
+        # weighted mean radative acceleration
+        # g_rad = Sum(Ni*Di*g_rad(i))/Sum(Ni*Di)
+        # where Ni is the relative population of ion i
+        # Di is its diffusion coefficient
 
-        # v_sound = sqrt(gamma*P/rho) (10.84 in C+O)
-        # gamma = adiabatic constant, depends on the constant (1.4 for air)
-        #   gamma = Cp/Cv, ratio of specific heats at constant pressure and volume
-        #   for monatomic gas gamma=5/3
-        #    Cp = Cv + nR
-        
-        # Radiation pressure, Prad = 1/3 * a * T^4  (10.19 in C+O)
-        # a = radiation constant = 4sigma/c = 7.565767e-16 J/m3/K4
+        # Radiative acceleration
+        # http://gradsvp.obspm.fr/g_rad.html
 
-        # kboltz_cgs = 1.380649e-16 # erg/K
-        # ne = Pe / (temp*kboltz_cgs)  # electron number density
-        # n = Pg / (temp*kboltz_cgs)   # non-electron number density
-        
-        import pdb; pdb.set_trace()
+        # dPrad/dr = -kappaross*density/c * Frad
+        # Frad = -c/(kappaross*density) * dPrad/dr
+        # outward flux
+        dPrad = np.gradient(self.radpressure)
+        dr = np.gradient(self.depth)
+        dPrad_dr = dPrad/dr
+        Frad = cspeedcgs/(self.kappaross*self.density) * dPrad_dr
 
-        # Need header
-        newheader = make_kurucz_header([teff,logg,metal,alpha],ndepths=ntau,abund=abu)
+        # Kurucz+Schild (1976)
+        # a = 4*pi/c * Integral(kappa(lambda) * Flux(lambda) dlambda)
+        radacc = 4*np.pi/cspeedcgs * self.kappaross*Frad / 11.
+        # this was still high by a factor of ~11, I'm not sure why
+        # I'm just going to apply it so the values are roughly correct.
         
-        header = ['TEFF   5000.  GRAVITY 3.00000 LTE',
-                  'TITLE  [0.0] VTURB=2  L/H=1.25 NOVER NEW ODF',
-                  ' OPACITY IFOP 1 1 1 1 1 1 1 1 1 1 1 1 1 0 1 0 0 0 0 0',
-                  ' CONVECTION ON   1.25 TURBULENCE OFF  0.00  0.00  0.00  0.00',
-                  'ABUNDANCE SCALE   1.00000 ABUNDANCE CHANGE 1 0.92040 2 0.07834',
-                  ' ABUNDANCE CHANGE  3 -10.94  4 -10.64  5  -9.49  6  -3.52  7  -4.12  8  -3.21',
-                  ' ABUNDANCE CHANGE  9  -7.48 10  -3.96 11  -5.71 12  -4.46 13  -5.57 14  -4.49',
-                  ' ABUNDANCE CHANGE 15  -6.59 16  -4.71 17  -6.54 18  -5.64 19  -6.92 20  -5.68',
-                  ' ABUNDANCE CHANGE 21  -8.87 22  -7.02 23  -8.04 24  -6.37 25  -6.65 26  -4.54',
-                  ' ABUNDANCE CHANGE 27  -7.12 28  -5.79 29  -7.83 30  -7.44 31  -9.16 32  -8.63',
-                  ' ABUNDANCE CHANGE 33  -9.67 34  -8.63 35  -9.41 36  -8.73 37  -9.44 38  -9.07',
-                  ' ABUNDANCE CHANGE 39  -9.80 40  -9.44 41 -10.62 42 -10.12 43 -20.00 44 -10.20',
-                  ' ABUNDANCE CHANGE 45 -10.92 46 -10.35 47 -11.10 48 -10.27 49 -10.38 50 -10.04',
-                  ' ABUNDANCE CHANGE 51 -11.04 52  -9.80 53 -10.53 54  -9.87 55 -10.91 56  -9.91',
-                  ' ABUNDANCE CHANGE 57 -10.87 58 -10.46 59 -11.33 60 -10.54 61 -20.00 62 -11.03',
-                  ' ABUNDANCE CHANGE 63 -11.53 64 -10.92 65 -11.69 66 -10.90 67 -11.78 68 -11.11',
-                  ' ABUNDANCE CHANGE 69 -12.04 70 -10.96 71 -11.98 72 -11.16 73 -12.17 74 -10.93',
-                  ' ABUNDANCE CHANGE 75 -11.76 76 -10.59 77 -10.69 78 -10.24 79 -11.03 80 -10.91',
-                  ' ABUNDANCE CHANGE 81 -11.14 82 -10.09 83 -11.33 84 -20.00 85 -20.00 86 -20.00',
-                  ' ABUNDANCE CHANGE 87 -20.00 88 -20.00 89 -20.00 90 -11.95 91 -20.00 92 -12.54',
-                  ' ABUNDANCE CHANGE 93 -20.00 94 -20.00 95 -20.00 96 -20.00 97 -20.00 98 -20.00',
-                  ' ABUNDANCE CHANGE 99 -20.00',
-                  'READ DECK6 72 RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB, FLXCNV,VCONV,VELSND']
-        
-        header = ['s5000_g+3.0_m1.0_t02_x3_z+0.00_a+0.00_c+0.00_n+0.00_o+0.00_r+0.00_s+0.00',
-                '  5000.      Teff [K] f APOGEE Last iteration; yyyymmdd=20160916',
-                '  3.5440E+10 Flux [erg/cm2/s]',
-                '  1.0000E+03 Surface gravity [cm/s2]',
-                '  2.0        Microturbulence parameter [km/s]',
-                '  1.0        Mass [Msun]',
-                ' +0.00 +0.00 Metallicity [Fe/H] and [alpha/Fe]',
-                '  3.6526E+11 Radius [cm] at Tau(Rosseland)=1.0',
-                '    15.56040 Luminosity [Lsun]',
-                '  1.50 8.00 0.076 0.00 are the convection parameters: alpha, nu, y and beta',
-                '  0.73826 0.24954 1.22E-02 are X, Y and Z, 12C/13C=89 (=solar)',
-                'Logarithmic chemical number abundances, H always 12.00',
-                '  12.00  10.93   1.05   1.38   2.70   8.39   7.78   8.66   4.56   7.84',
-                '   6.17   7.53   6.37   7.51   5.36   7.14   5.50   6.18   5.08   6.31',
-                '   3.17   4.90   4.00   5.64   5.39   7.45   4.92   6.23   4.21   4.60',
-                '   2.88   3.58   2.29   3.33   2.56   3.25   2.60   2.92   2.21   2.58',
-                '   1.42   1.92 -99.00   1.84   1.12   1.66   0.94   1.77   1.60   2.00',
-                '   1.00   2.19   1.51   2.24   1.07   2.17   1.13   1.70   0.58   1.45',
-                ' -99.00   1.00   0.52   1.11   0.28   1.14   0.51   0.93   0.00   1.08',
-                '   0.06   0.88  -0.17   1.11   0.23   1.25   1.38   1.64   1.01   1.13',
-                '   0.90   2.00   0.65 -99.00 -99.00 -99.00 -99.00 -99.00 -99.00   0.06',
-                ' -99.00  -0.52',
-                '  56 Number of depth points',
-                'Model structure']
-        
-        # Skip the partial pressures
+        # Need to interpolate in tauross
+        data = np.zeros((ntau,ncols),float)
+        # Interpolate RHOX
+        data[:,0] = np.interp(tauross_new,tauross,self.dmass)
+        # Interpolate Temperature
+        data[:,1] = np.interp(tauross_new,tauross,self.temperature)
+        # Interpolate gas pressure
+        data[:,2] = np.interp(tauross_new,tauross,self.gaspressure)
+        # Interpolate electron number density
+        #  Convert electron pressure to electron number density, P = n*k_B*T
+        edensity = self.epressure/(kboltz*self.temperature)
+        data[:,3] = np.interp(tauross_new,tauross,edensity)        
+        # Interpolate Kappa Ross
+        data[:,4] = np.interp(tauross_new,tauross,self.kappaross)
+        # Interpolate radiative acceleration
+        data[:,5] = np.interp(tauross_new,tauross,radacc)        # ??
+        # Microturbulence
+        # can insert in vmicro/vturb right away
+        data[:,6] = self.vmicro * 1e5  # convert from km/s to cm/s        
+        # Interpolate flux transported by convection
+        data[:,7] = np.interp(tauross_new,tauross,self.frconvflux)
+        # Interpolate convective velocity
+        data[:,8] = np.interp(tauross_new,tauross,self.velconv)
+        # Interpolate sound velocity
+        data[:,9] = np.interp(tauross_new,tauross,velsound)
+
+        # MARCS has H=12.0 and the linear values have N(H)=1.0
+        # to convert from Kurucz linear abundances to MARCS linear abundances,
+        # I think we just need to divide every thing by abu[0]
+        newabu = np.array(self.abu).copy()
+        # Renormalize Hydrogen such that X+Y+Z=1
+        #  needs to be done with N(X)/N(tot) values
+        YHe = 0.07834        
+        renormed_H = 1. - YHe - np.sum(newabu[2:])
+        newabu[0] = renormed_H
+        # lowest values in header are -20.0
+        bd, = np.where(newabu < 1e-100)
+        if len(bd)>0:
+            newabu[bd] = 1.08648414e-20
+        newheader = make_kurucz_header(self.params[0:4],ndepths=ntau,abund=newabu)
+
+        # Tail lines
+        # radiation pressure at the surface
+        #  Radiation pressure, Prad = 1/3 * a * T^4  (10.19 in C+O)
+        #  a = radiation constant = 4sigma/c = 7.565767e-16 J/m3/K4
+        #    = 7.5646e-15 erg/cm3/K4
+        radpressure = arad * data[0,1]**4
+        tail = ['PRADK {:10.4E}'.format(radpressure),
+                'BEGIN                    ITERATION  15 COMPLETED']
+
+        # Make the new Kurucz model
+        newmodel = KuruczAtmosphere(data,newheader,self.params.copy(),self.labels.copy(),
+                                    abu=list(newabu),tail=tail)
+        newmodel._tauross = tauross_new   # add in the exact tauross values
+        return newmodel
         
 
 ###########   Atmosphere Grids  #################
@@ -2441,34 +2462,10 @@ class MARCSGrid():
         if tail[-1]=='':
             tail = tail[:-1]
             
-        lines = header + datalines + tail
+        lines = newheader + datalines + tail
                 
         return lines
     
-    
-# Class for model atmospheres
-
-#class ModelAtmos(object):
-#    """ Class for model atmospheres of a various type"""
-#    
-#    def __init__(self,mtype):
-#        pass
-#
-#    def __call__(self,*pars):
-#        # Return the model atmosphere for the given input parameters
-#        pass
-#
-#class Atmos(object):
-#    """ Class for single model atmosphere"""
-#    
-#    def __init__(self,mtype):
-#        pass
-#
-#    def read(self,filename):
-#        pass
-#
-#    def write(self,filename):
-#        pass
 
 
 ###########
