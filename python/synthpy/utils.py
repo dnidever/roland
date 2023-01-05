@@ -458,6 +458,8 @@ def download_linelists(lineset='all'):
     else:
         raise Exception(lineset+' NOT supported')
 
+    # This should take 2-3 minutes on a good connection
+    
     # Do the downloading
     t0 = time.time()
     print('Downloading '+str(len(filelist))+' linelist files')
