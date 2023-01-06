@@ -1571,15 +1571,16 @@ class KuruczAtmosphere(Atmosphere):
                  'NTAU        '+str(self.ndepths)]
         #KURUCZ
         #          Teff = 4150           log g = 2.5
-        #NTAU         72        
+        #NTAU         72
+        # The 5 columns are: rhox(i),t(i),pgas(i),ne(i),kaprefmass(i)
         # The 7 columns are: rhox, T, Pg, Ne, kappaross, radiative acceleration and vmicro (last two not used by MOOG)
         # 0.32577664E-02   2471.8 0.103E+01 0.254E+08 0.445E-04 0.101E-01 0.200E+06
         # 0.43041026E-02   2499.0 0.136E+01 0.338E+08 0.477E-04 0.936E-02 0.200E+06
-        fmt = ' {:14.8E} {:8.1f} {:9.3E} {:9.3E} {:9.3E} {:9.3E} {:9.3E}'        
+        fmt = ' {:14.8E} {:8.1f} {:9.3E} {:9.3E} {:9.3E}'        
         for i in range(self.ndepths):
             lines.append(fmt.format(self.dmass[i],self.temperature[i],self.pressure[i],self.edensity[i],
-                                    self.kappaross[i],self.radacc[i],self.microvel[i]))
-        lines.append('      {:7.2E}'.format(self.microvel[0]))
+                                    self.kappaross[i]))
+        lines.append('    {:7.2E}'.format(self.microvel[0]))
 
         if filename is not None:
             dln.writelines(filename,lines)
@@ -2115,14 +2116,14 @@ class MARCSAtmosphere(Atmosphere):
         lines = ['BEGN',
                  'A MARCS model for {:d}/{:.2f}/{:+.2f}'.format(int(self.teff),self.logg,self.feh),
                  'NTAU          '+str(self.ndepths)]
-        # The 6 columns are: ??
+        # The 6 columns are: tauross, t, log(pg), log(pe), mol weight, and kappaross
         #   1.0000e-04 3.4356e+03 2.0960e+00 -2.2620e+00 1.3050e+00 .7300e-03
         #   1.0000e+01 8.0262e+03 4.4230e+00  2.5640e+00 1.2870e+00 .2040e+00
-        fmt = '  {:10.4e} {:10.4e} {:10.4e} {:10.4e} {:10.4e} {:10.4e}'
+        fmt = '  {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e}'
         for i in range(self.ndepths):
-            lines.append(fmt.format(self.dmass[i],self.temperature[i],self.pressure[i],self.edensity[i],
-                                    self.kappaross[i],self.radacc[i],self.microvel[i]))
-        lines.append('      {:7.2E}'.format(self.vmicro))
+            lines.append(fmt.format(self.tauross[i],self.temperature[i],np.log10(self.gaspressure[i]),
+                                    np.log10(self.epressure[i]),self.mnmolecweight[i],self.kappaross[i]))
+        lines.append('    {:7.2E}'.format(self.vmicro*1e5))
 
         if filename is not None:
             dln.writelines(filename,lines)
