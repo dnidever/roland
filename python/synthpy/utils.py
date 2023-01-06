@@ -440,7 +440,9 @@ def download_linelists(lineset='all'):
             {'id':'1S9q-OOBed6kBHMSGxdjx4rXQGigAaWcg', 'output':'gfTiO.moog.gz'},
             {'id':'1QnCXqZdBVlde2cQ9l2G_a1488UKTG17c', 'output':'gfMOLsun.moog.gz'},
             {'id':'17goVSZtiyI8cktxVWdCVCpsB82acgaZg', 'output':'gfATO.moog.gz'}]
-
+    # {'id':'1JQIbz2EVfQnLmr6f_IoIfq5RecoPAU74','output':'gfallx3_bpo.moog.gz'}
+    # {'id':'1vf7DUXcoJnUHecTCq81qVSOgyZda142_','output':'kmol3_0.01_30.moo.gz'}
+    
     turbo = [{'id':'1eiAf7DECYbYEHwORk3DrH6JobxFbtXYt', 'output':'H2O-8.turbo.gz'},
              {'id':'1eT6QpA0Vj62uGTgPLtUJLKbKnNgfxFnT', 'output':'gfTiO.turbo.gz'},
              {'id':'1YIwuI0B2YnT6wtZnkKSvkQQveEWSsQSg', 'output':'gfMOLsun.turbo.gz'},
