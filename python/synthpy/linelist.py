@@ -90,31 +90,29 @@ molec_dissoc_energy = {10108:5.168,   # H2O
 
 # compile fixed-format parsers for each format type
 
-aspcap_parser = lambda l: tuple((l[0:9].strip(),l[11:18].strip(),l[20:27].strip(),l[29:33].strip(),
-                                 l[35:38].strip(),l[38:45].strip(),l[47:50].strip(),l[52:60].strip(),
-                                 l[60:72].strip(),l[72:77].strip(),l[77:88].strip(),l[88:100].strip(),
-                                 l[100:105].strip(),l[105:116].strip(),l[116:122].strip(),
-                                 l[122:128].strip(),l[128:134].strip(),l[136:138].strip(),
-                                 l[138:140].strip(),l[140:143].strip(),l[143:149].strip(),
-                                 l[149:152].strip(),l[152:158].strip(),l[158:163].strip(),
-                                 l[163:168].strip(),l[168:169].strip(),l[169:170].strip(),
-                                 l[170:171].strip(),l[171:172].strip(),l[172:173].strip(),
-                                 l[173:174].strip(),l[174:179].strip(),l[179:184].strip(),
-                                 l[184:187].strip(),l[187:193].strip()))
+aspcap_parser = lambda l: tuple((l[0:9].strip(),l[10:17].strip(),l[18:25].strip(),l[26:30].strip(),
+                                 l[31:34].strip(),l[34:41].strip(),l[42:45].strip(),l[46:54].strip(),
+                                 l[54:66].strip(),l[66:71].strip(),l[71:82].strip(),l[82:94].strip(),
+                                 l[94:99].strip(),l[99:110].strip(),l[110:116].strip(),l[116:122].strip(),
+                                 l[122:128].strip(),l[129:131].strip(),l[131:133].strip(),l[133:136].strip(),
+                                 l[136:142].strip(),l[142:145].strip(),l[145:151].strip(),l[151:156].strip(),
+                                 l[156:161].strip(),l[161:162].strip(),l[162:163].strip(),l[163:164].strip(),
+                                 l[164:165].strip(),l[165:166].strip(),l[166:167].strip(),l[167:172].strip(),
+                                 l[172:177].strip(),l[177:180].strip(),l[180:186].strip()))
 
 akurucz_parser = lambda l: tuple((l[0:11].strip(),l[11:18].strip(),l[18:24].strip(),l[24:36].strip(),
-                                  l[36:41].strip(),l[43:53].strip(),l[53:65].strip(),l[65:70].strip(),
-                                  l[72:82].strip(),l[82:88].strip(),l[88:94].strip(),l[94:100].strip(),
-                                  l[100:104].strip(),l[104:106].strip(),l[106:108].strip(),
-                                  l[108:111].strip(),l[111:117].strip(),l[117:120].strip(),
-                                  l[120:126].strip(),l[126:131].strip(),l[131:136].strip(),
-                                  l[138:139].strip(),l[139:140].strip(),l[142:143].strip(),
-                                  l[143:144].strip(),l[144:145].strip(),l[145:148].strip(),
-                                  l[148:153].strip(),l[153:158].strip()))
+                                  l[36:41].strip(),l[42:52].strip(),l[52:64].strip(),l[64:69].strip(),
+                                  l[70:80].strip(),l[80:86].strip(),l[86:92].strip(),l[92:98].strip(),
+                                  l[98:102].strip(),l[102:104].strip(),l[104:106].strip(),
+                                  l[106:109].strip(),l[109:115].strip(),l[115:118].strip(),
+                                  l[118:124].strip(),l[124:129].strip(),l[129:134].strip(),
+                                  l[135:136].strip(),l[136:137].strip(),l[138:139].strip(),
+                                  l[139:140].strip(),l[140:141].strip(),l[141:144].strip(),
+                                  l[144:149].strip(),l[149:154].strip()))
 
 mkurucz_parser = lambda l: tuple((l[0:10].strip(),l[10:17].strip(),l[17:22].strip(),l[22:32].strip(),
                                   l[32:37].strip(),l[37:48].strip(),l[48:52].strip(),l[52:57].strip(),
-                                  l[63:68].strip(),l[74:76].strip()))
+                                  l[60:65].strip(),l[68:70].strip()))
 
 asynspec_parser = lambda l: tuple((l[0:11].strip(),l[11:18].strip(),l[18:25].strip(),l[25:37].strip(),
                                    l[37:43].strip(),l[43:55].strip(),l[55:61].strip(),l[61:68].strip(),
@@ -125,39 +123,51 @@ asynspec_parser = lambda l: tuple((l[0:11].strip(),l[11:18].strip(),l[18:25].str
 msynspec_parser = lambda l: tuple((l[0:10].strip(),l[10:20].strip(),l[20:27].strip(),l[27:39].strip(),
                                    l[39:49].strip(),l[49:59].strip(),l[59:69].strip()))
 
+synspec7_parser = lambda l: tuple((l[0:10].strip(),l[10:20].strip(),l[20:27].strip(),l[27:39].strip(),
+                                    l[39:49].strip(),l[49:59].strip(),l[59:60].strip()))
 
 # first type of turbospectrum formats
-aturbo1_parser = lambda l: turple((l[0:10].strip(),l[12:18].strip(),l[20:27].strip(),l[29:34].strip(),
-                                   l[36:42].strip(),l[44:53].strip(),l[55:61].strip(),l[67:68].strip(),
-                                   l[74:75].strip(),l[77:81].strip(),l[83:87].strip()))
-mturbo1_parser = lambda l: tuple((l[0:10].strip(),l[12:18].strip(),l[20:27].strip(),l[29:34].strip(),
-                                  l[36:42].strip(),l[44:53].strip(),l[55:61].strip(),l[67:68].strip(),
-                                  l[74:75].strip(),l[77:81].strip(),l[83:87].strip()))
+aturbo1_parser = lambda l: tuple((l[0:10].strip(),l[11:17].strip(),l[18:25].strip(),l[26:31].strip(),
+                                   l[32:38].strip(),l[39:48].strip(),l[49:55].strip(),l[58:59].strip(),
+                                   l[62:63].strip(),l[64:68].strip(),l[69:73].strip()))
+
+mturbo1_parser = lambda l: tuple((l[0:10].strip(),l[11:17].strip(),l[18:25].strip(),l[26:31].strip(),
+                                  l[32:38].strip(),l[39:48].strip(),l[49:55].strip(),l[58:59].strip(),
+                                  l[62:63].strip(),l[64:68].strip(),l[69:73].strip()))
 
 # second type of turbospectrum formats
-mturbo2_parser = lambda l: tuple((l[0:10].strip(),l[12:18].strip(),l[20:27].strip(),l[29:38].strip(),
-                                  l[40:46].strip(),l[48:57].strip(),l[61:62].strip(),l[68:69].strip(),
-                                  l[73:76].strip(),l[78:81].strip(),l[85:91].strip(),l[93:104].strip(),
-                                  l[106:117].strip()))
-aturbo2_parser = lambda l: tuple((l[0:10].strip(),l[12:18].strip(),l[20:27].strip(),l[29:38].strip(),
-                                  l[40:46].strip(),l[48:57].strip(),l[59:65].strip(),l[69:70].strip(),
-                                  l[76:77].strip(),l[81:84].strip(),l[86:89].strip(),l[93:99].strip(),
-                                  l[101:112].strip(),l[114:125].strip()))
+mturbo2_parser = lambda l: tuple((l[0:10].strip(),l[11:17].strip(),l[18:25].strip(),l[26:35].strip(),
+                                  l[36:42].strip(),l[43:52].strip(),l[54:55].strip(),l[58:59].strip(),
+                                  l[61:64].strip(),l[65:68].strip(),l[70:76].strip(),l[77:88].strip(),
+                                  l[89:100].strip()))
+
+aturbo2_parser = lambda l: tuple((l[0:10].strip(),l[11:17].strip(),l[18:25].strip(),l[26:35].strip(),
+                                  l[36:42].strip(),l[43:52].strip(),l[53:59].strip(),l[61:62].strip(),
+                                  l[65:66].strip(),l[68:71].strip(),l[72:75].strip(),l[77:83].strip(),
+                                  l[84:95].strip(),l[96:107].strip()))
 
 
-#fmtarr = []
-#count = 0
-#for i in range(len(fmt)):
-#    fmt1 = fmt[i]
-#    print(i,fmt1)    
-#    if fmt1.find('X')>-1:
-#        flen = int(fmt1[:-1])    
-#        count += flen
-#    else:
-#        flen = int(float(fmt1[1:]))
-#        fmtarr.append('l['+str(count)+':'+str(count+flen)+'].split()')
-#    count += flen
+def fmt2linesplit(fmt):
+    """ This converts a format string into a tuple of line splits."""
+    fmtarr = fmt
+    fmt = fmt.replace('(','')
+    fmt = fmt.replace(')','')    
+    fmt = fmt.split(',')
+    fmtarr = []
+    count = 0
+    for i in range(len(fmt)):
+        fmt1 = fmt[i]
+        if fmt1.find('X')>-1:
+            flen = int(fmt1[:-1])    
+        else:
+            flen = int(float(fmt1[1:]))
+            fmtarr.append('l['+str(count)+':'+str(count+flen)+'].strip()')
+        print(i,fmt1,flen,count)        
+        count += flen
 
+    line = ','.join(fmtarr)
+    return line
+        
 def read(filename,*args,**kwargs):
     """ Convenient function for Linelist.read()"""
     return Linelist.read(filename,*args,**kwargs)
@@ -1087,20 +1097,20 @@ def reader_kurucz(line):
         #fmt = '(F11.4,F7.3,A6,F12.3,F5.2,1X,A10,F12.3,F5.2,1X,A10,'
         #fmt += '3F6.2,A4,2I2,I3,F6.3,I3,F6.3,2I5,1X,A1,A1,1X,A1,A1,A1,A3,2I5)'
         #out = utils.fread(line,fmt)
-        out = akurucz_reader(line)
+        out = akurucz_parser(line)
         
         specid = out[2].strip()         # line identifier    
         lam = tofloat(out[0],u.nm)      # wavelength in nm
-        loggf = out[1]                  # loggf (unitless)    
+        loggf = tofloat(out[1])         # loggf (unitless)    
         EP1 = tofloat(out[3],(1/u.cm))  # first energy level in cm-1
-        J1 = out[4]                     # J for first level
+        J1 = tofloat(out[4])            # J for first level
         label1 = out[5].strip()         # label for first energy level
         EP2 = tofloat(out[6],(1/u.cm))  # second energy level in cm-1
-        J2 = out[7]                     # J for second level
+        J2 = tofloat(out[7])            # J for second level
         label2 = out[8].strip()         # label for second energy level
-        rad = out[9]                    # log of radiative damping constant, Gamma Rad
-        stark = out[10]                 # log of stark damping constant/electron number. Gamma Stark
-        vdW = out[11]                   # log of van der Waals damping constant/neutral hydrogen number
+        rad = tofloat(out[9])           # log of radiative damping constant, Gamma Rad
+        stark = tofloat(out[10])        # log of stark damping constant/electron number. Gamma Stark
+        vdW = tofloat(out[11])          # log of van der Waals damping constant/neutral hydrogen number
         iso = out[15]                   # isotope number
         hyp = out[16]                   # hyperfine component log fractional strength         
         iso2 = out[17]                  # isotope number  (for diatomics there are two and no hyperfine) 
@@ -1162,7 +1172,7 @@ def reader_kurucz(line):
     # read labels as a single value instead of four
     #fmt = '(F10.4,F7.3,F5.1,F10.3,F5.1,F11.3,I4,A5,3X,A5,3X,I2)'
     #out = utils.fread(line,fmt)
-    out = mkurucz_reader(line)
+    out = mkurucz_parser(line)
     
 
     # from http://kurucz.harvard.edu/linelists/linesmol/molbin.for
@@ -1208,9 +1218,9 @@ def reader_kurucz(line):
     lam = tofloat(out[0],u.nm)        # wavelength in nm
     loggf = out[1]                    # loggf (unitless)
     EP1 = tofloat(out[3],(1/u.cm))    # first energy level in cm-1
-    J1 = out[2]                       # J for first level
+    J1 = tofloat(out[2])              # J for first level
     EP2 = tofloat(out[5],(1/u.cm))    # second energy level in cm-1
-    J2 = out[4]                       # J for second level
+    J2 = tofloat(out[4])              # J for second level
     code = out[6]                     # molecule code (atomic number 1 + 0 + atomic number 2)
     label1 = out[7].strip()           # first level label (electronic state, vibrational state, lamba-doubling component, spin state)
     label2 = out[8].strip()           # second level label
@@ -1322,9 +1332,9 @@ def reader_aspcap(line):
     
     ##fmt = "(F9.4,F7.3,F7.3,F4.2,A3,F7.3,A3,F8.2,F12.3,F5.1,A11,F12.3,F5.1,A11,"
     ##fmt += "F6.2,F6.2,F6.2,I2,I2,I3,F6.3,I3,F6.3,I5,I5,A1,I1,A1,A1,I1,A1,I5,I5,A3,F6.3)"
-    #fmt = "(A9,1X,A7,1X,A7,1X,A4,1X,A3,A7,1X,A3,1X,A8,A12,A5,A11,A12,"
-    #fmt += "A5,A11,A6,A6,A6,1X,A2,A2,A3,A6,A3,A6,A5,"
-    #fmt += "A5,A1,A1,A1,A1,A1,A1,A5,A5,A3,A6)"    
+    fmt = "(A9,1X,A7,1X,A7,1X,A4,1X,A3,A7,1X,A3,1X,A8,A12,A5,A11,A12,"
+    fmt += "A5,A11,A6,A6,A6,1X,A2,A2,A3,A6,A3,A6,A5,"
+    fmt += "A5,A1,A1,A1,A1,A1,A1,A5,A5,A3,A6)"    
     #out = utils.fread(line,fmt)
 
     lam = tofloat(out[0],u.nm)   # wavelength in nm
@@ -1488,6 +1498,15 @@ def reader_synspec(line):
     arr = line.split()
     narr = len(arr)
 
+    # Sometimes the lines run together, then use the formatted parser
+    if narr not in [17,11,9,7,4]:
+        if narr==6 or narr==7:
+            arr = synspec7_parser(line)
+            narr = len(arr)
+        else:
+            arr = asynspec_parser(line)
+            narr = len(arr)
+        
     # Default values
     ep = None
     EP1 = None
@@ -1909,8 +1928,8 @@ def reader_turbo(line):
     else:
         # first ' should be at character 61
         # 15062.414 23.593  -2.804      0.00    1.0  0.00e+00   0.00  'x' 'x' 0.0 1.0 'HE  I                         '
-        #fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,1X,F6.2,'
-        #fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'
+        fmt = '(F10.3,1X,F6.3,1X,F7.3,1X,F9.2,1X,F6.1,1X,E9.2,1X,F6.2,'
+        fmt += '2X,A1,3X,A1,2X,F3.1,1X,F3.1,2X,A6,1X,A11,1X,A11)'
         out = aturbo2_parser(line)        
     #out = utils.fread(line,fmt)    
     
@@ -3040,10 +3059,10 @@ class Reader(object):
                     return None
                 newpos = self.position[self._count]
                 self.file.seek(newpos)
-                line = self.file.readline().rstrip()
+                line = self.file.readline()
                 self._count += 1                
             else:
-                line = self.file.readline().rstrip()
+                line = self.file.readline()
                 self._count += 1
             # Empty string means we are done
             if line=='':
@@ -3055,7 +3074,7 @@ class Reader(object):
             if self.intype=='vald' and line[0]=="'":
                 arr = line.split(',')
                 if len(arr)<5: comment=True
-            # The last "line" will be a normal line and parsed below                
+            # The last "line" will be a normal line and parsed below
         # Handle turbospectrum case
         if self.turbo and line[0]=="'":
             # Read header lines until done
@@ -3090,6 +3109,7 @@ class Reader(object):
             self.snum = int(hlines[0].split("'")[2].split()[1])  # number of lines for this species
             # The last "line" will be a normal line and parsed below
         # Parse the line
+        line = line.rstrip()  # strip newline
         info = self.reader(line)
         # Add species/element information from header line
         if self.turbo:
