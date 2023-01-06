@@ -1364,7 +1364,7 @@ class KuruczAtmosphere(Atmosphere):
         for l in lines: f.write(l+'\n')
         f.close()
 
-    def to_marcs(self):
+    def to_marcs(self,filename=None):
         """ Convert to MARCS format."""
 
         # -- Kurucz columns --
@@ -1554,9 +1554,16 @@ class KuruczAtmosphere(Atmosphere):
         
         # Skip the partial pressures
 
-        return MARCSAtmosphere(data,newheader,self.params.copy(),self.labels.copy(),abu=list(newabu))
+        newmodel = MARCSAtmosphere(data,newheader,self.params.copy(),self.labels.copy(),abu=list(newabu))
 
-    def to_moog(self):
+        if filename is not None:
+            dln.writelines(filename,newmodel.lines)
+            return
+
+        return newmodel
+
+        
+    def to_moog(self,filename=None):
         """ Return the lines for a MOOG-ready format."""
 
         lines = ['KURUCZ',
@@ -1574,6 +1581,10 @@ class KuruczAtmosphere(Atmosphere):
                                     self.kappaross[i],self.radacc[i],self.microvel[i]))
         lines.append('      {:7.2E}'.format(self.microvel[0]))
 
+        if filename is not None:
+            dln.writelines(filename,lines)
+            return
+        
         return lines
 
         # 3710g083m+000.mod
@@ -1927,7 +1938,7 @@ class MARCSAtmosphere(Atmosphere):
         for l in lines: f.write(l+'\n')
         f.close()
 
-    def to_kurucz(self):
+    def to_kurucz(self,filename):
         """ Convert to Kurucz format."""
 
         # -- MARCS columns --
@@ -2091,9 +2102,14 @@ class MARCSAtmosphere(Atmosphere):
         newmodel = KuruczAtmosphere(data,newheader,self.params.copy(),self.labels.copy(),
                                     abu=list(newabu),tail=tail)
         newmodel._tauross = tauross_new   # add in the exact tauross values
+
+        if filename is not None:
+            dln.writelines(filename,newmodel.lines)
+            return
+        
         return newmodel
 
-    def to_moog(self):
+    def to_moog(self,filename=None):
         """ Return the lines for a MOOG-ready format."""
 
         lines = ['BEGN',
@@ -2106,8 +2122,12 @@ class MARCSAtmosphere(Atmosphere):
         for i in range(self.ndepths):
             lines.append(fmt.format(self.dmass[i],self.temperature[i],self.pressure[i],self.edensity[i],
                                     self.kappaross[i],self.radacc[i],self.microvel[i]))
-        lines.append('      {:7.2E}'.format(self.vmicro)
+        lines.append('      {:7.2E}'.format(self.vmicro))
 
+        if filename is not None:
+            dln.writelines(filename,lines)
+            return
+                     
         return lines
     
         
