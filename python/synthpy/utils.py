@@ -1,7 +1,16 @@
 import os
+import gzip
 import time
 import numpy as np
 import gdown
+import subprocess
+
+# Do we have gzip
+if subprocess.run(['which','gzip'],capture_output=True,shell=False).returncode==0:
+    GZIP = subprocess.check_output(['which','gzip'],shell=False)
+    GZIP = GZIP.decode().rstrip()
+else:
+    GZIP = None
 
 def atmosdir():
     """ Return the model atmospheres directory."""
@@ -17,6 +26,54 @@ def datadir():
     datadir = codedir+'/data/'
     return datadir
 
+def gzip(filename,shell=True,delete=True,compresslevel=6):
+    """ Gzip a file."""
+    if os.path.exists(filename)==False:
+        raise FileNotFoundError(filename+' NOT FOUND')
+    # Use the OS/shell
+    if GZIP is not None and shell:
+        # -d : decompression
+        # -f : over-write any existing data
+        # -k : keep original file
+        if delete==False:
+            out = subprocess.run([GZIP,'-f','-'+str(compresslevel),'-k',filename],capture_output=True)
+        else:
+            out = subprocess.run([GZIP,'-f','-'+str(compresslevel),filename],capture_output=True)
+    # Use python directly, about 3x slower
+    else:
+        outfile = filename+'.gz'
+        with open(filename,'rb') as f:
+            data = f.read()
+        with gzip.open(outfile,'wb',compresslevel=compresslevel) as f:
+            f.write(data)
+        # Delete original file
+        if delete:
+            os.path.remove(filename)
+
+def gunzip(filename,shell=True,delete=True):
+    """ Gunzip a file."""
+    if os.path.exists(filename)==False:
+        raise FileNotFoundError(filename+' NOT FOUND')
+    # Use the OS/shell
+    if GZIP is not None and shell:
+        # -d : decompression
+        # -f : over-write any existing data
+        # -k : keep original file
+        if delete==False:
+            out = subprocess.run([GZIP,'-d','-f','-k',filename],capture_output=True)
+        else:
+            out = subprocess.run([GZIP,'-d','-f',filename],capture_output=True)
+    # Use python directly, about 3x slower
+    else:
+        outfile = filename[0:-3]
+        with gzip.open(filename,'r') as f:
+            data = f.read().decode()
+        with open(outfile,'w') as f:
+            fout.write(data)
+        # Delete original file
+        if delete:
+            os.path.remove(filename)
+            
 def make_parser(fieldwidths):
     """ Make efficient fixed-with parser"""
     # https://stackoverflow.com/questions/4914008/how-to-efficiently-parse-fixed-width-files
@@ -428,7 +485,7 @@ def trapz(x,y):
     return trapz
 
 
-def download_linelists(lineset='all'):
+def download_linelists(lineset='all',force=False):
     """ Download the various linelists from my Google Drive."""
 
     synspec = [{'id':'1Mj8ys35-TEKIwMDcDb0OvEVvl8slUwdt', 'output':'H2O-8.synspec.gz'},
@@ -465,11 +522,18 @@ def download_linelists(lineset='all'):
     # Do the downloading
     t0 = time.time()
     print('Downloading '+str(len(filelist))+' linelist files')
+    if os.path.exists(datadir())==False:
+        os.makedirs(datadir())
     for i in range(len(filelist)):
         print(str(i+1)+' '+filelist[i]['output'])
         fileid = filelist[i]['id']
         url = f'https://drive.google.com/uc?id={fileid}'
         output = datadir()+filelist[i]['output']  # save to the data directory
-        gdown.download(url, output, quiet=False)
-
+        outputuncmp = output[:-3]
+        if (os.path.exists(output)==False and os.path.exists(outputuncmp)==False) or force:
+            gdown.download(url, output, quiet=False)
+            # Uncompress
+            print('Uncompressing '+filelist[i]['output'])
+            gunzip(output,shell=True,delete=True)
+        
     print('All done in {:.1f} seconds'.format(time.time()-t0))

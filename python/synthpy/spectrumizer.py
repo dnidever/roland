@@ -246,6 +246,16 @@ class SynspecSpectrumizer(Spectrumizer):
         except:
             raise Exception('Problems importing synspec package')
         self._synthesis = synsynthesis.synthesize
+        # Use default synspec linelists
+        if linelist is None:
+            ddir = utils.datadir()
+            self.linelist = [ddir+f for f in ['gfATO.synspec','gfMOLsun.synspec','gfTiO.synspec','H2O-8.synspec']]
+            # Check if they exist, otherwise download them
+            exists = [os.path.exists(f) for f in self.linelist]
+            if np.sum(exists)!=len(self.linelist):
+                utils.download_linelists('synspec')
+        else:
+            self.linelist = linelist
         
 class KorgSpectrumizer(Spectrumizer):
     

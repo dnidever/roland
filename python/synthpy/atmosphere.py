@@ -1226,7 +1226,7 @@ class KuruczAtmosphere(Atmosphere):
     @property
     def vmicro(self):
         """ Return vmicro."""
-        return self.microvel[0]  # take it from the data itself
+        return self.params[-1]  # take it from the data itself
     
     # The next 8 properties are the actual atmosphere data
     # RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB, FLXCNV
@@ -1566,9 +1566,26 @@ class KuruczAtmosphere(Atmosphere):
     def to_moog(self,filename=None):
         """ Return the lines for a MOOG-ready format."""
 
-        lines = ['KURUCZ',
-                 '        Teff= {:.1f}    Log g= {:.2f}'.format(self.teff,self.logg),
-                 'NTAU        '+str(self.ndepths)]
+        # KURTYPE
+        #  read (nfmodel,*) rhox(i),t(i),pgas(i),ne(i)
+        # 0.61950350E-02   2198.8 4.422E-02 8.676E+05
+        # 0.82261777E-02   2221.4 5.874E-02 1.153E+06
+
+        lines = ['KURTYPE',
+                 '  {:d}./   {:4.2f}/   {:4.2f}      mic = {:.4f}'.format(int(self.teff),self.logg,self.feh,self.vmicro),
+                 '             '+str(self.ndepths),
+                 '5000.0']   # reference wavelength
+        # 0.61950350E-02   2198.8 4.422E-02 8.676E+05
+        # 0.82261777E-02   2221.4 5.874E-02 1.153E+06
+
+        fmt = ' {:14.8E} {:8.1f} {:9.3E} {:9.3E}'        
+        for i in range(self.ndepths):
+            lines.append(fmt.format(self.dmass[i],self.temperature[i],self.pressure[i],self.edensity[i]))
+        lines.append('    {:.2f}'.format(self.vmicro))
+
+        #lines = ['KURUCZ',
+        #         '        Teff= {:.1f}    Log g= {:.2f}'.format(self.teff,self.logg),
+        #         'NTAU        '+str(self.ndepths)]
         #KURUCZ
         #          Teff = 4150           log g = 2.5
         #NTAU         72
@@ -1576,11 +1593,11 @@ class KuruczAtmosphere(Atmosphere):
         # The 7 columns are: rhox, T, Pg, Ne, kappaross, radiative acceleration and vmicro (last two not used by MOOG)
         # 0.32577664E-02   2471.8 0.103E+01 0.254E+08 0.445E-04 0.101E-01 0.200E+06
         # 0.43041026E-02   2499.0 0.136E+01 0.338E+08 0.477E-04 0.936E-02 0.200E+06
-        fmt = ' {:14.8E} {:8.1f} {:9.3E} {:9.3E} {:9.3E}'        
-        for i in range(self.ndepths):
-            lines.append(fmt.format(self.dmass[i],self.temperature[i],self.pressure[i],self.edensity[i],
-                                    self.kappaross[i]))
-        lines.append('    {:7.2E}'.format(self.microvel[0]))
+        #fmt = ' {:14.8E} {:8.1f} {:9.3E} {:9.3E} {:9.3E}'        
+        #for i in range(self.ndepths):
+        #    lines.append(fmt.format(self.dmass[i],self.temperature[i],self.pressure[i],self.edensity[i],
+        #                            self.kappaross[i]))
+        #lines.append('    {:7.2E}'.format(self.microvel[0]))
 
         if filename is not None:
             dln.writelines(filename,lines)

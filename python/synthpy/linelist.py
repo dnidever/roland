@@ -445,9 +445,11 @@ def convertto(info,outtype):
             if len(num) % 2 == 1: num='0'+num
             natom = len(num)//2
             if natom==2:
-                newid = num+'.0'+decimal[1:3]+decimal[3:5]
+                newid = num+'.0'+decimal[1:3]+decimal[4:6]
             else:
                 newid = num+'.0'
+            if newid[0]=='0':
+                newid = newid[1:]
             info['id'] = newid
     # -- VALD --
     elif outtype=='vald':
@@ -1966,7 +1968,7 @@ def reader_turbo(line):
 
 #################  WRITERS  #####################
 
-def writer_moog(info,freeform=True):
+def writer_moog(info,freeform=False):
     """
     Creates the output line for a MOOG linelist.
 
@@ -2011,7 +2013,8 @@ def writer_moog(info,freeform=True):
     ep = info.get('ep')
     EP1 = info.get('EP1')
     EP2 = info.get('EP2')
-
+    molec = info.get('molec')
+    
     # Check that we have the essentials
     if lam is None or loggf is None or specid is None or ((ep is None or np.ma.is_masked(ep)) and \
        (EP1 is None or EP2 is None)):
@@ -2019,27 +2022,37 @@ def writer_moog(info,freeform=True):
     
     if ep is None or np.ma.is_masked(ep):
         # Calculate excitation potential from EP1 and EP2
-        EP1 = EP1.value
-        EP2 = EP2.value
-        if (float(EP1) < 0):
-            ep = -float(EP1)
+        EP1 = float(EP1.value)
+        EP2 = float(EP2.value)
+        if (EP1 < 0):
+            ep = -EP1
         else:
-            ep = float(EP1)
-        if (float(EP2) < 0):
-            EP2 = -float(EP2)
-        if (float(EP2) < float(ep)):
-            ep = float(EP2)
+            ep = EP1
+        if (abs(EP2)<ep):
+            ep = abs(EP2)
     else:
         ep = ep.value
     vdW = info.get('vdW')
     if vdW is None or np.ma.is_masked(vdW):
-        vdW = 0.0
+        vdW = 10*' '
+    else:
+        vdW = '{:10.3f}'.format(vdW)
     dis = info.get('dis')
-    if dis is None or np.ma.is_masked(dis):
+    if molec and dis is None or np.ma.is_masked(dis):
         # Dissociation energy for molecules (in eV)
         dis = molec_dissoc_energy.get(int(num))
         if dis is None:
             dis = 0.0
+        dis = '{:10.3f}'.format(dis)
+    else:
+        dis = 10*' '
+
+    # Throw out problematic lines
+    # ion > 2
+    # wave > 9999998.0
+    # ep > 49
+    #if int(decimal)>2 or float(ep)>49 or float(wave)>999999.0:
+    #    pass
         
     # Wavelength in A
     # line designation
@@ -2056,13 +2069,35 @@ def writer_moog(info,freeform=True):
     #  7164.959     010108.0      0.220     -7.369                 5.168
     #  7165.270     010108.0      0.189     -7.399                 5.168
     #  7165.850     010108.0      0.160     -7.402                 5.168
+
+    # example from linemake "moogatom05000"
+    #  4980.074      24.0     4.444    -2.324
+    #  4980.088      20.0     4.760    -4.281
+    #  4980.122      27.1     5.118    -2.398
+    #  4980.124      27.0     4.256    -2.465
+    #  4980.166      28.0     3.603     0.070
+    #  4980.216      23.0     2.136    -7.950
+    
+    # example from linemake "moogsih"
+    #  3268.046 114.00128     0.003    -6.488               3.190             KURPLEZ
+    #  3268.067 114.00128     0.003    -6.488               3.190             KURPLEZ
+    #  3268.120 114.00128     0.007    -6.518               3.190             KURPLEZ
+    #  3268.149 114.00128     0.007    -6.518               3.190             KURPLEZ
+    #  3268.788 114.00128     0.014    -6.545               3.190             KURPLEZ
+
+    # example from linemake "moogco"
+    #  9635.106 608.01216     5.318    -8.777              11.092           3023R011
+    #  9635.193 608.01216     5.314    -8.817              11.092           3023R010
+    #  9635.248 608.01216     5.323    -8.741              11.092           3023R012
+    #  9635.509 608.01216     5.310    -8.860              11.092           3023R009
+    #  9635.619 608.01216     5.328    -8.708              11.092           3023R013
     
     # lambda, specid, ep, loggf, vdW, dissociation energy
     # Formatted write
     if freeform==False:
-        fmt = "{0:10.3f}{1:>12s}{2:10.3f}{3:10.3f}{4:10.3f}{5:10.3f}\n"
+        fmt = "{0:10.3f}{1:>10s}{2:10.3f}{3:10.3f}{4:>10s}{5:>10s}\n"
     else:
-        fmt = "{0:10.3f} {1:>12s} {2:10.3f} {3:10.3f} {4:10.3f} {5:10.3f}\n"
+        fmt = "{0:10.3f} {1:>12s} {2:10.3f} {3:10.3f} {4:>10s} {5:>10s}\n"
     line = fmt.format(lam.value,specid,ep,loggf,vdW,dis)
     
     return line
