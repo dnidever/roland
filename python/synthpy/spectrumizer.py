@@ -1,6 +1,5 @@
 import numpy as np
-
-from . import linelists
+from . import linelist,atmosphere
 
 # Class for Spectrumizer object that creates a spectrum
 
@@ -48,8 +47,10 @@ class Spectrumizer(object):
        Type of model atmospheres to use.  The options are:
          "kuruczgrid" : The internal Kurucz/ATLAS grid with interpolation to the
                          input Teff, logg, [M/H], and [alpha/M].
+                         3500<=teff<=50000,0.0<=logg<=5.0,-4.0<=metal<=0.5,0.0<=alpha<=0.4
          "marcsgrid" : The internal MARCS grid with interpolation to the
                          input Teff, logg, [M/H], and [alpha/M].
+                         2800<=teff<=8000, -0.5<=logg<=5.5,-2.5<=metal<=1
          "atmosnet" : The atmosnet artificial neural network package trained
                          on a large grid of model atmospheres.  The input
                          stellar parameters and abundances will be used to
@@ -73,7 +74,7 @@ class Spectrumizer(object):
         self.synthtype = synthtype.lower()
         self._linelist = linelist
         # Check if we need to translate the linelist
-        self.linelist = self.getlinelist(linelist)
+        self.linelist = utils.default_linelists(synthtype)
         self.atmos = atmos
         # "atlasgrid" : The internal Kurucz/ATLAS grid with interpolation to the
         #             input Teff, logg, and [M/H].
@@ -88,7 +89,8 @@ class Spectrumizer(object):
         #             stellar parameters and abundances will be used to
         #             obtain the model.    
         elif atmos.lower()=='atmosnet':
-            self._atmosfunc = atmospheres.KuruczGrid()
+            from atmosnet import model as anetmodels
+            self._atmosfunc = anetmodels.load_models()
         # <function> : A user-defined function that needs to be able to take
         #             as input Teff, logg, and [M/H]            
         elif type(atmos) is function:
@@ -177,6 +179,25 @@ class Spectrumizer(object):
 
     def getlinelist(self,*kwargs):
         """ Return the model atmosphere."""
+
+        #-synspec: can take multiple linelists, ONE atomic, multiple molecular lists
+        #    they must all either be ascii or binary files
+        #    synple.create_links() creates synlinks for
+        #      fort.19 - atomic linelists
+        #      fort.20 - first molecular linelist
+        #      fort.21 - second molecular linelist
+        #        etc.
+        #    ALREADY IMPLEMENTED
+        #-moog: single linelist
+        #    need to implement combining linelists
+        #-turbospectrum: multiple lists, in the bsyn_lu file
+        #   ’NFILES :’ ’2’
+        #   TEST-data/nlte_linelist_test.txt
+        #   DATA/Hlinedata
+        #   ALREADY IMPLEMENTED   
+        #-korg: single linelist, maybe can read multiple and join them??
+        #    need to implement combining linelists
+        
         if kwargs.get('linelists') is None:
             # Use initially input linelists
             linelist = self.linelists
@@ -194,6 +215,10 @@ class Spectrumizer(object):
             
     def getatmos(self,*kwargs):
         """ Return the model atmosphere."""
+        # Synspec: MARCS and Kurucz
+        # MOOG: MARCS and Kurucz but in "moog" format
+        # Turbospectrum: MARCS and Kurucz
+        # Korg: MARCS
         if kwargs.get('atmod') is not None:
             return kwargs['atmod']
         if kwargs.get('atmod') is None and self.atmos is not None:
@@ -205,18 +230,31 @@ class Spectrumizer(object):
             if self.atmos=='kuruczgrid':
                 atmod = self._atmosfunc(teff,logg,mh,am)
                 atmos_type = 'kurucz'
+                if self.synthtype=='moog':
+                    atmod = atmod.to_moog()
             # "marcsgrid" : The internal MARCS grid with interpolation to the
             #             input Teff, logg, and [M/H].
             if self.atmos=='marcsgrid':
-                atmod = self._atmosfunc(teff,logg,mh,am)                
+                atmod = self._atmosfunc(teff,logg,mh,am) 
                 atmos_type = 'marcs'
+                if self.synthtype=='moog':
+                    atmod = atmod.to_moog()                
             # "atmosnet" : The atmosnet artificial neural network package trained
             #             on a large grid of model atmospheres.  The input
             #             stellar parameters and abundances will be used to
             #             obtain the model.
             if self.atmos=='atmosnet':
-                atmod = atmosnet(teff,logg,mh,am)
+                atm1 = self._atmosfunc(teff,logg,mh,am)
+                atm1.header = [a.rstrip() for a in atm1.header]
+                # Convert to synthpy KuruczAtmosphere object
+                abu,scale = atmosphere.kurucz_getabund(mh,am)     # generate abu array             
+                tail = ['PRADK 8.3314E-01', 'BEGIN                    ITERATION  15 COMPLETED']
+                atmod = atmosphere.KuruczAtmosphere(atm1.data,atm1.header,atm1.labels,
+                                                    ['teff','logg','metal'],abu,tail,scale)
                 atmos_type = 'kurucz'
+                if self.synthtype=='moog':
+                    atmod = atmod.to_moog()                                
+                atmos_type = 'atmosnet'
             # <function> : A user-defined function that needs to be able to take
             #             as input Teff, logg, and [M/H]
             if type(self.atmos) is function:

@@ -11,6 +11,12 @@ if subprocess.run(['which','gzip'],capture_output=True,shell=False).returncode==
     GZIP = GZIP.decode().rstrip()
 else:
     GZIP = None
+# Do we have sort
+if subprocess.run(['which','sort'],capture_output=True,shell=False).returncode==0:
+    SORT = subprocess.check_output(['which','sort'],shell=False)
+    SORT = SORT.decode().rstrip()
+else:
+    SORT = None    
 
 def atmosdir():
     """ Return the model atmospheres directory."""
@@ -483,6 +489,62 @@ def trapz(x,y):
         trapz = trapz+0.5*y[n]*(x[n]-x[n-1])
 
     return trapz
+
+def merge_linelists(filenames,outfile,shell=True,wavesort=True):
+    """ Merge multiple linelists of the same type."""
+
+    # Use the shell/OS
+    if shell:
+        with open(outfile,'w') as fout:
+            if wavesort:            
+                ret = subprocess.run(['sort','-k','1']+filenames,stdout=fout)
+            else:
+                ret = subprocess.run(['sort','-m']+filenames,stdout=fout)
+    # Do it in python
+    else:
+        lines = []
+        wave = []
+        for i in range(len(filenames)):
+            lines1 = dln.readlines(filenames[i])
+            lines += lines1            
+            if wavesort:
+                wave1 = [l.split()[0] for l in lines1]
+                wave += wave1
+        # Sort the lines
+        if wavesort:
+            wave = np.array(wave).astype(float)
+            lines = np.array(lines)
+            ind = np.argsort(wave)
+            lines = lines[ind]
+        # Write to output file
+        dln.writelines(outfile,lines)
+            
+
+def default_linelists(synthtype,download=True):
+    """ Return the filenames of the default linelists for a given synthtype."""
+
+    if synthtype.lower()=='synspec':
+        filenames = ['gfATO.synspec','gfMOLsun.synspec','gfTiO.synspec','H2O-8.synspec']
+        filenames = [datadir()+f for f in filenames]
+        exists = [os.path.exists(f) for f in filenames]
+        if np.sum(exists) != len(filenames) and download:  # download, if necessary
+            download_linelists('synspec')
+    elif synthtype.lower()=='moog' or synthtype.lower()=='korg':
+        filenames = ['gfATO.moog','gfMOLsun.moog','gfTiO.moog','H2O-8.moog']
+        filenames = [datadir()+f for f in filenames]
+        exists = [os.path.exists(f) for f in filenames]
+        if np.sum(exists) != len(filenames) and download:  # download, if necessary
+            download_linelists('moog')        
+    elif 'turbo' in linelist.lower():
+        filenames = ['gfATO.turbo','gfMOLsun.turbo','gfTiO.turbo','H2O-8.turbo']
+        filenames = [datadir()+f for f in filenames]
+        exists = [os.path.exists(f) for f in filenames]
+        if np.sum(exists) != len(filenames) and download:  # download, if necessary
+            download_linelists('turbo')        
+    else:
+        raise Exception(synthtype+' NOT SUPPORTED')
+
+    return filenames
 
 
 def download_linelists(lineset='all',force=False):

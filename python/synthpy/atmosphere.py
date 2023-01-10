@@ -106,6 +106,41 @@ def load_kurucz_grid():
         data.append(lines1)
     return index,data
 
+def kurucz_getabund(metal=0.0,alpha=0.0,scale=None):
+    """ Calculate Kurucz abundance array for a given metallicity and alpha abundance."""
+    # By default scale down by [M/H]
+    if scale is None:
+        scale = 10**metal
+
+    # Start with solar abundance and scale by metallicity and alpha
+    abu = solar_abu_ntot
+    abu[2:] = 10**abu[2:]  # convert to linear        
+    abu[1:] /= abu[0]      # convert from N(X)/N(tot) -> N(X)/N(H)
+    # Scale by the metallicity
+    abu[2:] *= 10**metal
+    # Scale by alpha abundance
+    if alpha is not None and alpha != 0.0:
+        for i in [8,10,12,14,16,18,20,22]:
+            abu[i-1] *= 10**alpha       
+
+    
+    # Convert from N(X)/N(H) -> N(X)/N(tot)
+    #nhntot = abu[0]
+    #abu[1:] *= nhntot 
+    # CHECK THIS!!!
+    
+    # Renormalize Hydrogen such that X+Y+Z=1
+    #  needs to be done with N(X)/N(tot) values
+    renormed_H = 1. - YHe - np.sum(abu[2:])
+
+    # Apply scale
+    abu[2:] /= scale
+   
+    # Convert from linear to logarithmic
+    abu[2:] = np.log10(abu[2:])
+
+    return abu,scale
+    
 def read_kurucz_model(modelfile):
     """
     Reads a Kurucz model atmospheres.
@@ -334,15 +369,16 @@ def make_kurucz_header(params,ndepths=72,abund=None,vmicro=2.0,YHe=0.07834):
     # Start with solar abundance and scale by metallicity and alpha
     if abund is None:
         abu = solar_abu_ntot
-        # Scale by the metallicity (while in log)
-        abu[2:] += metal
-        # Scale by alpha abundance (while in log)
-        if alpha != 0.0:
-            for i in [8,10,12,14,16,18,20,22]:
-                abu[i-1] += alpha
         abu[2:] = 10**abu[2:]  # convert to linear        
         abu[1:] /= abu[0]      # convert from N(X)/N(tot) -> N(X)/N(H)
+        # Scale by the metallicity
+        abu[2:] *= 10**metal
+        # Scale by alpha abundance
+        if alpha != 0.0:
+            for i in [8,10,12,14,16,18,20,22]:
+                abu[i-1] *= 10**alpha       
     else:
+        # Abundances input as N(X)/N(H)
         abu = abund.copy()
         
     # Convert from N(X)/N(H) -> N(X)/N(tot)
