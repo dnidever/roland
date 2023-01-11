@@ -218,9 +218,9 @@ class Abundance(object):
         return len(self.data)
            
     def __repr__(self):
-        out = self.__class__.__name__+'('
-        out += ','.join([str(a) for a in self.data])
-        out += ')'
+        out = self.__class__.__name__+'\n'
+        for a in self:
+            out += '{:2s} = {:8.6e} [{:8.3f}]\n'.format(a.symbol,a.linear,a.log12)
         return out
 
     def __iter__(self):
