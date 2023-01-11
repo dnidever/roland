@@ -19,6 +19,7 @@ symbol = ['H' ,'He','Li','Be','B' ,'C' ,'N' ,'O' ,'F' ,'Ne',
           'Lu','Hf','Ta','W' ,'Re','Os','Ir','Pt','Au','Hg', 
           'Tl','Pb','Bi','Po','At','Rn','Fr','Ra','Ac','Th', 
           'Pa','U' ,'Np','Pu','Am','Cm','Bk','Cf','Es' ]
+symbol_lower = np.char.array(symbol).lower()
 
 mass = [ 1.00794, 4.00260, 6.941, 9.01218, 10.811, 12.0107, 14.00674, 15.9994,
          18.99840, 20.1797, 22.98977, 24.3050, 26.98154, 28.0855, 30.97376, 
@@ -69,11 +70,7 @@ solar_husser = [  12.00, 10.93,  3.26,  1.38,  2.79,  8.43,  7.83,  8.69,  4.56,
 
 def periodic(n):
     """ Routine to get element name / atomic number conversion """
-    elem = np.char.array(['H','He','Li','Be','B','C','N','O','F','Ne',
-                          'Na','Mg','Al','Si','P','S','Cl','Ar',
-                          'K','Ca','Sc','Ti','V','Cr','Mn','Fe','Co','Ni','Cu','Zn','Ga','Ge','As','Se','Br','Kr',
-                          'Rb','Sr','Y','Zr','Nb','Mo','Tc','Ru','Rh','Pd','Ag','Cd','In','Sn','Sb','Te','I','Xe',
-                          'Cs','Ba','La','Ce','Pr','Nd'])
+    elem = np.char.array(symbol)
     if isinstance(n,str):
         j, = np.where(elem.lower() == n.lower())
         return j[0]+1
@@ -138,6 +135,10 @@ class Abund(object):
             raise ValueError(atype,' not supported')
 
     @property
+    def symbol(self):
+        return self.name
+        
+    @property
     def linear(self):
         return self.data
         
@@ -192,6 +193,10 @@ class Abund(object):
       
     def __rtruediv__(self, value):
         return value / self.data
+
+    def copy(self):
+        """ Return a copy"""
+        return Abund(self.value,'linear',self.element)
     
     
 class Abundance(object):
@@ -209,46 +214,190 @@ class Abundance(object):
        else:
            self.data = data
 
+    def __len__(self):
+        return len(self.data)
+           
     def __repr__(self):
         out = self.__class__.__name__+'('
         out += ','.join([str(a) for a in self.data])
         out += ')'
         return out
-       
+
+    def __iter__(self):
+        """ Return an iterator for the Abundance object """        
+        self._count = 0
+        return self
+
+    def __next__(self):
+        """ Returns the next value in the iteration. """        
+        if self._count < len(self):
+            result = self[self._count]
+            self._count += 1
+            return result
+        else:
+            raise StopIteration
+    
     def __getitem__(self,index):
         # One value, by index
         if isinstance(index,int) or isinstance(index,np.integer):
             data = self.data[index]
-            return Abund(data,'linear',index+1)
+            return Abund(data,'linear',self.symbol[index])
         # One value, by name
         elif isinstance(index,str):
-            indx = periodic(index)-1
-            data = self.data[indx]
-            return Abund(data,'linear',indx+1)
-        ## Several values
-        #elif isinstance(index,slice):
-        #    return self.data[index]
+            if index.lower() in self.symbol_lower:
+                indx, = np.where(np.array(self.symbol_lower)==index.lower())
+                data = self.data[indx[0]]
+                return Abund(data,'linear',self.symbol[indx[0]])
+            elif index.lower()=='alpha':
+                aindex = np.array([8,10,12,14,16,18,20,22])-1
+                return self[aindex]
+            else:
+                raise ValueError(index+' not supported')
+        # Several values, list/array
+        elif isinstance(index,list) or isinstance(index,np.ndarray):
+            new = Abundance()
+            new.data = []
+            new.symbol = []
+            new.mass = []
+            for i in index:
+                new.data.append(self.data[i])
+                new.symbol.append(self.symbol[i])
+                new.mass.append(self.mass[i])
+            return new
+        # Several values, slice
+        elif isinstance(index,slice):
+            new = Abundance()
+            new.data = self.data[index]
+            new.symbol = self.symbol[index]
+            new.mass = self.mass[index]
+            return new            
         else:
             raise ValueError(index,' not understood')
 
     def __setitem__(self,index,value):
-        if isinstance(value,float):
-            self.data[index] = value
-        elif isinstance(value,Abund):
-            self.data[index] = value.linear
+        # Integer index
+        if isinstance(index,int):
+            data = value
+            if isinstance(value,Abund):
+                data = value.linear
+            self.data[index] = data
+        # String index
+        elif isinstance(index,str):
+            # Single symbol name, e.g. Ca
+            if index.lower() in self.symbol_lower:
+                indx, = np.where(np.array(self.symbol_lower)==index.lower())
+                data = value
+                if isinstance(value,Abund):
+                    data = value.linear
+                self.data[indx[0]] = data
+            # alpha abundance
+            elif index.lower()=='alpha':
+                for v in value:
+                    self[v.symbol] = v.data
+            else:
+                raise ValueError(index+' not supported')
+        # Several values, list/array
+        elif isinstance(index,list) or isinstance(index,np.ndarray):
+            for i in index:
+                self.data[i] = value
+        # Several values, slice
+        elif isinstance(index,slice):
+            self.data[index] = value            
         else:
             raise ValueError(str(type(value))+' not supported')
 
-
+    @property
+    def symbol_lower(self):
+        return [s.lower() for s in self.symbol]
+                          
+    @property
+    def metals(self):
+        return np.sum(self.data[2:])
+        
     # methods for changing abundances
     # abu['Ca'] += 0.5
     # abu['alpha'] = -0.3
 
-            
-    # mass
+        
+    # Addition and Subtraction assumes that you want to this in dex
+        
+    def __add__(self, value):
+        new = self.copy()
+        new += value
+        return new
+        
+    def __iadd__(self, value):
+        for i in range(len(self)):
+            if self.symbol[i] != 'H' and self.symbol[i] != 'He':
+                self.data[i] *= 10**value
+        return self
+        
+    def __radd__(self, value):
+        new = self.copy()
+        new += value
+        return new
+        
+    def __sub__(self, value):
+        new = self.copy()
+        new -= value
+        return new
+              
+    def __isub__(self, value):
+        for i in range(len(self)):
+            if self.symbol[i] != 'H' and self.symbol[i] != 'He':
+                self.data[i] /= 10**value
+        return self
+         
+    def __rsub__(self, value):
+        new = self.copy()
+        new -= value
+        return new
 
-    def to_kurucz():
-        pass
+    # Multiplication and Division assumes that you want to this in linear space
+    
+    def __mul__(self, value):
+        new = self.copy()
+        new *= value
+        return new
+               
+    def __imul__(self, value):
+        for i in range(len(self)):
+            if self.symbol[i] != 'H' and self.symbol[i] != 'He':
+                self.data[i] *= value
+        return self
+    
+    def __rmul__(self, value):
+        new = self.copy()
+        new *= value
+        return new
+               
+    def __truediv__(self, value):
+        new = self.copy()
+        new /= value
+        return new
+      
+    def __itruediv__(self, value):
+        for i in range(len(self)):
+            if self.symbol[i] != 'H' and self.symbol[i] != 'He':
+                self.data[i] /= value
+        return self
+      
+    def __rtruediv__(self, value):
+        new = self.copy()
+        new /= value
+        return new
 
-    def to_marcs():
-        pass    
+    def to_kurucz(self):
+        """ Convert to Kurucz model atmosphere header abundance format."""
+        abu = self.log12
+        return abu
+
+    def to_marcs(self):
+        """ Convert to MARCS model atmosphere header abundance format."""        
+        abu = self.log12
+        abu[0] = 12
+        return abu
+
+    def copy(self):
+        """ Return a copy."""
+        return Abundance(self.data.copy())
