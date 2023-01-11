@@ -51,7 +51,9 @@ Rcgs = 8.314e7    # erg/mol/K, gas constant, cgs
 ## Load the Kurucz grid data and index
 #kurucz_index,kurucz_data = load_kurucz_grid()
 
-
+# N(X)/N(tot)
+#  these are the exact values that are in the Kurucz headers
+#  for solar model atmospheres
 solar_abu_ntot = np.array([ 0.92040, 0.07834, -10.94, -10.64,
                              -9.49,  -3.52,  -4.12,  -3.21,
                              -7.48,  -3.96,  -5.71,  -4.46,
@@ -106,16 +108,20 @@ def load_kurucz_grid():
         data.append(lines1)
     return index,data
 
-def kurucz_getabund(metal=0.0,alpha=0.0,scale=None):
+def kurucz_getabund(metal=0.0,alpha=0.0,scale=None,YHe=0.07834,log=False):
     """ Calculate Kurucz abundance array for a given metallicity and alpha abundance."""
+    # This results abundances in N(X)/N(H)
     # By default scale down by [M/H]
     if scale is None:
         scale = 10**metal
-
+    if log==False:
+        scale = 1.0
+        
     # Start with solar abundance and scale by metallicity and alpha
-    abu = solar_abu_ntot
-    abu[2:] = 10**abu[2:]  # convert to linear        
-    abu[1:] /= abu[0]      # convert from N(X)/N(tot) -> N(X)/N(H)
+    abu = solar_abu_ntot.copy()
+    abu[2:] = 10**abu[2:]  # convert to linear
+    # convert N(X)/N(tot) -> N(X)/N(H)
+    #abu[1:] /= abu[0]
     # Scale by the metallicity
     abu[2:] *= 10**metal
     # Scale by alpha abundance
@@ -123,21 +129,58 @@ def kurucz_getabund(metal=0.0,alpha=0.0,scale=None):
         for i in [8,10,12,14,16,18,20,22]:
             abu[i-1] *= 10**alpha       
 
+    # The ratio of YHe / XH = 0.08511
+    hehratio = 0.08511
+    abusum = np.sum(abu[2:])
+    # 1 = abusum + renormed_H + renormed_H*hehratio
+    # renormed_H = (1-abusum)/(1+hehratio)
+    renormed_H = (1-abusum)/(1+hehratio)
+    renormed_He = renormed_H*hehratio
+    abu[0] = renormed_H
+    abu[1] = renormed_He
+
+    # Convert from N(X)/N(tot) -> N(X)/N(H)
+    abu[1:] /= abu[0]
+    
+    
+    # Renormalize Hydrogen such that X+Y+Z=1
+    #  needs to be done with N(X)/N(tot) values
+    #renormed_H = 1. - YHe - np.sum(abu[2:])
+    #abu[0] = renormed_H
+
+    # YHE seems to change for each metallicity
+    # maybe its the mass fraction that is the same
+    # 
+    
+    # X is the mass fraction in H
+    # Y is the mass fraction in He
+    # Z is the mass fraction in Li+
+    #totmass = np.sum(np.array(abu)*np.array(mass))
+    #X = abu[0]*mass[0] / totmass
+    #Y = abu[1]*mass[1] / totmass
+    #Z = 1 - X - Y
+    # NO, Y is changing as well
+
+    
+    # Convert from N(X)/N(tot) -> N(X)/N(H)
+    #abu[1:] /= abu[0]
     
     # Convert from N(X)/N(H) -> N(X)/N(tot)
     #nhntot = abu[0]
     #abu[1:] *= nhntot 
     # CHECK THIS!!!
-    
-    # Renormalize Hydrogen such that X+Y+Z=1
-    #  needs to be done with N(X)/N(tot) values
-    renormed_H = 1. - YHe - np.sum(abu[2:])
 
-    # Apply scale
-    abu[2:] /= scale
+    # Put it back in log format for the header
+    if log:    
+        # Renormalize Hydrogen such that X+Y+Z=1
+        #  needs to be done with N(X)/N(tot) values
+        #renormed_H = 1. - YHe - np.sum(abu[2:])
+
+        # Apply scale
+        abu[2:] /= scale
    
-    # Convert from linear to logarithmic
-    abu[2:] = np.log10(abu[2:])
+        # Convert from linear to logarithmic
+        abu[2:] = np.log10(abu[2:])
 
     return abu,scale
     

@@ -7,14 +7,14 @@ import subprocess
 
 # Do we have gzip
 if subprocess.run(['which','gzip'],capture_output=True,shell=False).returncode==0:
-    GZIP = subprocess.check_output(['which','gzip'],shell=False)
-    GZIP = GZIP.decode().rstrip()
+    GZIP = subprocess.check_output(['which','gzip'],shell=False,text=True)
+    GZIP = GZIP.rstrip()
 else:
     GZIP = None
 # Do we have sort
 if subprocess.run(['which','sort'],capture_output=True,shell=False).returncode==0:
-    SORT = subprocess.check_output(['which','sort'],shell=False)
-    SORT = SORT.decode().rstrip()
+    SORT = subprocess.check_output(['which','sort'],shell=False,text=True)
+    SORT = SORT.rstrip()
 else:
     SORT = None    
 
