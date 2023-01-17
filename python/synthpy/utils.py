@@ -18,6 +18,20 @@ if subprocess.run(['which','sort'],capture_output=True,shell=False).returncode==
 else:
     SORT = None    
 
+def isnumber(data):
+    """ Is this variable a number?  Integer or float."""
+    dtype = type(data)
+    if dtype == float:
+        return True
+    if dtype == int:
+        return True
+    if dtype == np.integer:
+        return True
+    if dtype == np.floating:
+        return True
+    else:
+        return False
+    
 def atmosdir():
     """ Return the model atmospheres directory."""
     fil = os.path.abspath(__file__)

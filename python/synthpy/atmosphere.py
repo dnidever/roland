@@ -108,7 +108,40 @@ def load_kurucz_grid():
         data.append(lines1)
     return index,data
 
-def kurucz_getabund(metal=0.0,alpha=0.0,scale=None,YHe=0.07834,log=False):
+
+def kurucz_getabund(lines):
+    """ Retrieve the abundance values from the Kurucz model header."""
+    # With absolutely no modifications
+
+    count = 0
+    entries = [' ']
+    while entries[0] != 'ABUNDANCE':  
+        line = lines[count]
+        entries = line.split()
+        count += 1
+        
+    abu = []
+
+    if entries[1] == 'SCALE': 
+        scale = float(entries[2])
+    
+    while entries[0] == 'ABUNDANCE':
+        i = 0
+        for word in entries: 
+            if (word == 'CHANGE'): w = i
+            i = i + 1 
+        for i in range(int((len(entries)-w-1)/2)):
+            z = int(entries[w+1+2*i])
+            abu.append(float(entries[w+2+2*i]))
+
+        line = lines[count]
+        entries = line.split() 
+        count += 1
+
+    return abu
+
+
+def kurucz_makeabund(metal=0.0,alpha=0.0,scale=None,YHe=0.07834,log=False):
     """ Calculate Kurucz abundance array for a given metallicity and alpha abundance."""
     # This results abundances in N(X)/N(H)
     # By default scale down by [M/H]
@@ -253,7 +286,7 @@ def read_kurucz_model(modelfile):
     abu[2:] = scale*10.**abu[2:]
 
     # The abundances in the Kurucz model headers are all relative to N(tot), not N(H)
-    # We just need to divide by (N(H)/N(tot)) which is the first abundances value (for H).
+    # We just need to divide by (N(H)/N(tot)) which is the first abundance value (for H).
     # Leave the first value so we remember what it was.
     nhntot = abu[0]
     abu[1:] /= nhntot
