@@ -144,7 +144,8 @@ class Abund(object):
         if self.element is None:
             out = self.__class__.__name__+'('+str(self.data)+')'
         else:
-            out = self.__class__.__name__+'('+self.name+'='+str(self.data)+')'            
+            out = self.__class__.__name__+'({:d} {:s} N({:s})/N(H)={:.3e} log(eps)={:.3f})'.format(self.element,self.name,
+                                                                                                   self.name,self.data,self.logeps)
         return out
                 
     def to(self,atype):
@@ -238,6 +239,7 @@ class Abundances(object):
         self.symbol = atomic_symbol.copy()
         # Solar abundances
         self._solar = solarabund(stype)
+        self.stype = stype
         # No abundance input, use solar values
         if data is None:
             self.data = np.array(self._solar.copy())
@@ -301,11 +303,14 @@ class Abundances(object):
         return len(self.data)
            
     def __repr__(self):
-        out = self.__class__.__name__+'([M/H]={:.2f})\n'.format(self.metallicity)
+        out = self.__class__.__name__+'([M/H]={:.2f},solar={:s})\n'.format(self.metallicity,self.stype)
         out += 'Num Name   N(X)/N(H)   log(eps)   [X/H]\n'
         for a in self:
             anum = periodic(a.symbol)
-            out += '{:2d}   {:2s}  {:8.6e} {:8.3f}  [{:6.3f}]\n'.format(anum,a.symbol,a.linear,a.logeps,a.xh)
+            if anum==1 or anum==2:
+                out += '{:2d}   {:2s}  {:8.6e} {:8.3f}  [ ---- ]\n'.format(anum,a.symbol,a.linear,a.logeps)
+            else:
+                out += '{:2d}   {:2s}  {:8.6e} {:8.3f}  [{:6.3f}]\n'.format(anum,a.symbol,a.linear,a.logeps,a.xh)            
         return out
 
     def __iter__(self):
@@ -333,9 +338,54 @@ class Abundances(object):
                 indx, = np.where(np.array(self.symbol_lower)==index.lower())
                 data = self.data[indx[0]]
                 return Abund(data,'linear',self.symbol[indx[0]],self._solar[indx[0]])
+            # Alpha elements
             elif index.lower()=='alpha':
                 aindex = np.array([8,10,12,14,16,18,20,22])-1
                 return self[aindex]
+            # Metallicity, M_H
+            elif index.upper()=='M_H':
+                return self.metallicity
+            # Alpha_H, single value
+            elif index.lower().find('alpha')>-1 and index.upper().endswith('_H'):
+                nxnh = np.zeros(8,float)
+                nxnh_solar = np.zeros(8,float)                
+                for i,a in enumerate(np.array([8,10,12,14,16,18,20,22])-1):
+                    nxnh[i] = self.data[a]
+                    nxnh_solar[i] = self._solar[a]
+                # [X/H] = log(N(X)/N(H)) - log(N(X)/N(H))_sol = log( N(X)/N(H) / (N(X)/N(H))_sol )
+                # 10**[X/H] = N(X)/N(H) / (N(X)/N(H))_sol 
+                # N(X)/N(H) = 10**[X/H]) * (N(X)/N(H))_sol
+                alpha_h = np.log10( np.mean(nxnh/nxnh_solar) )
+                return alpha_h
+            # Alpha_M
+            elif index.lower().find('alpha')>-1 and (index.upper().endswith('_FE') or index.upper().endswith('_M')):
+                mh = self.metallicity  # get metallicity
+                # Convert [X/M] to [X/H]
+                # [X/M] = [X/H] + [M/H]
+                alpha_h = self['alpha_h']
+                alpha_m = alpha_h + mh
+                return alpha_m
+            # X_H
+            elif index.upper().endswith('_H'):
+                elem = index.split('_')[0]
+                anum = periodic(elem)
+                # [X/H] = log(N(X)/N(H)) - log(N(X)/N(H))_sol = log( N(X)/N(H) / (N(X)/N(H))_sol )
+                # 10**[X/H] = N(X)/N(H) / (N(X)/N(H))_sol 
+                # N(X)/N(H) = 10**[X/H]) * (N(X)/N(H))_sol
+                nxnh = self.data[anum-1]
+                xh = np.log10( nxnh / self._solar[anum-1] )
+                return xh
+            # X_FE or X_M            
+            elif index.upper().endswith('_FE') or index.upper().endswith('_M'):
+                elem = index.split('_')[0]
+                anum = periodic(elem)
+                mh = self.metallicity  # get metallicity
+                # Convert [X/M] to [X/H]
+                # [X/M] = [X/H] + [M/H]
+                nxnh = self.data[anum-1]
+                xh = np.log10( nxnh / self._solar[anum-1] )  # [X/H]
+                xm = xh - mh
+                return xm
             else:
                 raise ValueError(index+' not supported')
         # Several values, list/array
@@ -389,11 +439,14 @@ class Abundances(object):
                 # Single linear value input
                 elif utils.isnumber(value):
                     for a in np.array([8,10,12,14,16,18,20,22])-1:
-                        self[a] = value
+                        self.data[a] = value
+            # Metallicity
+            elif index.upper()=='M_H':
+                self.data[2:] *= 10**value
             # Alpha_H, single value
             elif index.lower().find('alpha')>-1 and index.upper.endswith('_H'):
                 for a in np.array([8,10,12,14,16,18,20,22])-1:
-                    self[a] = 10**value * self._solar[a]
+                    self.data[a] = 10**value * self._solar[a]
             # Alpha_M
             elif index.lower().find('alpha')>-1 and (index.upper().endswith('_FE') or index.upper().endswith('_M')):
                 mh = self.metallicity  # get metallicity
@@ -401,7 +454,7 @@ class Abundances(object):
                 # [X/M] = [X/H] + [M/H]
                 value_h = value + mh
                 for a in np.array([8,10,12,14,16,18,20,22])-1:
-                    self[a] = 10**value_h * self._solar[a]
+                    self.data[a] = 10**value_h * self._solar[a]
             # X_H
             elif index.upper().endswith('_H'):
                 elem = index.split('_')[0]
@@ -409,16 +462,16 @@ class Abundances(object):
                 # [X/H] = log(N(X)/N(H)) - log(N(X)/N(H))_sol = log( N(X)/N(H) / (N(X)/N(H))_sol )
                 # 10**[X/H] = N(X)/N(H) / (N(X)/N(H))_sol 
                 # N(X)/N(H) = 10**[X/H]) * (N(X)/N(H))_sol
-                self[anum-1] = 10**value * self._solar[anum-1]
+                self.data[anum-1] = 10**value * self._solar[anum-1]
             # X_M or X_FE
-            if index.upper().endswith('_FE') or index.upper().endswith('_M'):
+            elif index.upper().endswith('_FE') or index.upper().endswith('_M'):
                 elem = index.split('_')[0]
                 anum = periodic(elem)
                 mh = self.metallicity  # get metallicity
                 # Convert [X/M] to [X/H]
                 # [X/M] = [X/H] + [M/H]
                 value_h = value + mh
-                self[anum-1] = 10**value_h * self._solar[anum-1]
+                self.data[anum-1] = 10**value_h * self._solar[anum-1]
             else:
                 raise ValueError(index+' not supported')
         # Several values, list/array
@@ -431,6 +484,17 @@ class Abundances(object):
         else:
             raise ValueError(str(type(value))+' not supported')
 
+    def fill(self):
+        """ Return data with all elements filled in."""
+        # This is useful when the object does not hold all of the elements
+        if len(self)<99:
+            data = solarabund(self.stype)
+            for v in self:
+                data[v.element-1] = v.data
+            return data
+        else:
+            return data
+        
     @property
     def symbol_lower(self):
         return [s.lower() for s in self.symbol]
@@ -443,11 +507,44 @@ class Abundances(object):
     def metallicity(self):
         return np.log10( np.sum(self.data[2:]) / np.sum(self._solar[2:]) )
 
+    @property
+    def nhntot(self):
+        """ Return N(H)/N(tot)."""
+        #if len(self)<90:
+        # Sum( N(x)/N(H) ) over all elements = N(tot)/N(H)
+        nhntot = 1/np.sum(self.data)
+        return nhntot
     
-    # methods for changing abundances
-    # abu['Ca'] += 0.5
-    # abu['alpha'] = -0.3
+    @property
+    def linear(self):
+        """ Return N(X)/N(H) for all elements."""        
+        return self.data
 
+    @property
+    def nxnh(self):
+        """ Return N(X)/N(H) for all elements."""        
+        return self.data
+    
+    @property
+    def log(self):
+        """ Return log(N(X)/N(H)) for all elements."""        
+        return np.log10(self.data)
+
+    @property
+    def logeps(self):
+        """ Return log(N(X)/N(H))+12 for all elements."""        
+        return np.log10(self.data)+12
+
+    @property
+    def xh(self):
+        """ Return [X/M] for all elements."""        
+        return np.log10( self.data / self._solar )
+
+    @property
+    def xm(self):
+        """ Return [X/M] for all elements."""
+        mh = self.metallicity
+        return self.xh - mh
         
     # Addition and Subtraction assumes that you want to this in dex
         
@@ -519,7 +616,6 @@ class Abundances(object):
 
     def to_kurucz(self,scale=None):
         """ Convert to Kurucz model atmosphere header abundance format."""
-        abu = self.logeps
 
         # Kurucz abundances values are in N(X)/N(tot) format where the linearized
         # values all sum to 1.0
@@ -527,6 +623,9 @@ class Abundances(object):
 
         # N(He)/N(H) ~ 0.08511
 
+        # Sum( N(x)/N(H) ) over all elements = N(tot)/N(H)
+        nhntot = 1/np.sum(self.data)
+        
         # The ratio of YHe / XH = 0.08511
         hehratio = 0.08511
         abusum = np.sum(self.data[2:])
@@ -551,5 +650,6 @@ class Abundances(object):
         newabund.mass = self.mass.copy()
         newabund.symbol = self.symbol.copy()
         newabund._solar = self._solar.copy()
+        newabund.stype = self.stype
         newabund.data = self.data.copy()
         return newabund
