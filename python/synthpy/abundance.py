@@ -50,6 +50,7 @@ def periodic(n):
         else:
             return elem[n-1]
 
+
 def solarabund(stype='asplund'):
     """ Return the solar abundances."""
 
@@ -229,7 +230,27 @@ class Abund(object):
     
     
 class Abundances(object):
-    """ Abundances of all elements."""
+    """
+    A class to represent abundances of all elements.  Internally the data are
+    represented as N(X)/N(H).
+
+    Parameters
+    ----------
+    data : float, int or list, optional
+      Input data.  This can be a list or array of abundances (type specified by "atype"),
+        the metallicity, a dictionary of values or None.  If nothing is input, then solar
+        abundances are assubmed.  A dictionary of abundance values has to give the element name
+        as the key and use linear format (e.g., N(X)/N(H)) or X_H as specified by the
+        key name (e.g., MG_H)
+    atype : str, optional
+      The abundance format of "data".  Options are "linear" for N(X)/N(H), "log" for log(N(X)/N(H)),
+        "logeps" for log(N(X)/N(H))+12.0, or "xh" / "x_h" for [X/H].
+    stype : str, optional
+      The type of solar abundances to use.  Options are "asplund" for Asplund, Grevesse and Sauval (2005),
+       or "husser" Asplund et al. 2009 chosen for the Husser et al. (2013) Phoenix model atmospheres.
+       Default is "asplund".
+
+    """
 
     # The internal representation of the 
     
@@ -243,10 +264,18 @@ class Abundances(object):
         # No abundance input, use solar values
         if data is None:
             self.data = np.array(self._solar.copy())
+        # Dictionary input
+        elif type(data) == dict or type(data) == OrderedDict:
+            # This parses the dictionary and returns values in N(X)/N(H) format
+            newdata = self.parseabudict(data)
+            for i,k in enumerate(newdata):
+                val = newdata[k]
+                anum = periodic(k)
+                self.data[anum-1] = val
         # Only metallicity input, scale the solar values
         elif np.array(data).size==1:
            self.data = self._solar.copy()
-           self.data[2:] *= 10**float(data)
+           self.data[2:] *= 10**float(data)            
         # Abundance values input           
         else:
             self.data = np.zeros(99,float)
@@ -261,7 +290,13 @@ class Abundances(object):
                 self.data[0:len(data)] = np.array(data)
                 self.data[0] = 1.0
                 self.data[1] = 0.0851138                
-                self.data[2:len(data)] = 10**(np.array(data)[2:len(data)]-12)                
+                self.data[2:len(data)] = 10**(np.array(data)[2:len(data)]-12)
+            elif atype.lower()=='xh' or atype.lower()=='x_h':
+                # [X/H] = log(N(X)/N(H)) - log(N(X)/N(H))_sol = log( N(X)/N(H) / (N(X)/N(H))_sol )
+                # 10**[X/H] = N(X)/N(H) / (N(X)/N(H))_sol 
+                # N(X)/N(H) = 10**[X/H]) * (N(X)/N(H))_sol
+                ndata = len(data)                
+                self.data[2:ndata] = 10**data[2:ndata] * self._solar[2:ndata]
             else:
                 raise ValueError(atype+' not supported')
 
@@ -275,29 +310,13 @@ class Abundances(object):
             return newabund
         # Dictionary input
         if parstype == dict or pastype == OrderedDict:
-            npars = len(pars)
-            for i,key in enumerate(pars.keys()):
-                key = key.upper()
-                val = pars[key]
-                # Versus H
-                if key.endswith('_H'):
-                    elem = key.split('_')[0]
-                    anum = periodic(elem)
-                    # [X/H] = log(N(X)/N(H)) - log(N(X)/N(H))_sol = log( N(X)/N(H) / (N(X)/N(H))_sol )
-                    # 10**[X/H] = N(X)/N(H) / (N(X)/N(H))_sol 
-                    # N(X)/N(H) = 10**[X/H]) * (N(X)/N(H))_sol
-                    self.data[anum-1] = 10**val * newabund._solar[anum-1]
-                # Versus FE or M
-                if key.endswith('_FE') or key.endswith('_M'):
-                    elem = key.split('_')[0]
-                    anum = periodic(elem)
-                    mh = newabund.metallicity  # get metallicity
-                    # Convert [X/M] to [X/H]
-                    # [X/M] = [X/H] + [M/H]
-                    valh = val + mh
-                    self.data[anum-1] = 10**valh * newabund._solar[anum-1]
-                else:
-                    raise ValueError(key+' not supported. Must be X_H, X_FE or X_M')
+            # Parse the dictionary and return values in N(X)/N(H) format            
+            newpars = newabund.parseabudict(parse)
+            for i,k in enumerate(newdata):
+                val = newdata[k]
+                anum = periodic(k)
+                newabund.data[anum-1] = val
+            return newabund
            
     def __len__(self):
         return len(self.data)
@@ -444,7 +463,7 @@ class Abundances(object):
             elif index.upper()=='M_H':
                 self.data[2:] *= 10**value
             # Alpha_H, single value
-            elif index.lower().find('alpha')>-1 and index.upper.endswith('_H'):
+            elif index.lower().find('alpha')>-1 and index.upper().endswith('_H'):
                 for a in np.array([8,10,12,14,16,18,20,22])-1:
                     self.data[a] = 10**value * self._solar[a]
             # Alpha_M
@@ -614,6 +633,52 @@ class Abundances(object):
         new /= value
         return new
 
+    def parseabudict(self,abu,solar=None):
+        """ Parse abundance dictionary values and return dictionary with values in N(X)/N(H) format."""
+        if type(abu) != dict and type(abu) != OrderedDict:
+            raise ValueError("Input is not a dictionary")
+        # Make all keys uppercase
+        pars = abu.copy()
+        for k in abu.keys():
+            pars[k.upper()] = pars.pop(k)
+        # Check if M_H is input
+        if 'M_H' in pars.keys():
+            mh = pars['M_H']
+        else:
+            mh = self.metallicity
+        # Solar abundances to use
+        if solar is None:
+            solar = self._solar
+        npars = len(pars)
+        newdict = dict()
+        for i,key in enumerate(pars.keys()):
+            key = key.upper()
+            val = pars[key]
+            # Versus H
+            if key.endswith('_H'):
+                elem = key.split('_')[0]
+                anum = periodic(elem)
+                # [X/H] = log(N(X)/N(H)) - log(N(X)/N(H))_sol = log( N(X)/N(H) / (N(X)/N(H))_sol )
+                # 10**[X/H] = N(X)/N(H) / (N(X)/N(H))_sol 
+                # N(X)/N(H) = 10**[X/H]) * (N(X)/N(H))_sol
+                newdict[elem] = 10**val * solar[anum-1]
+            # Versus FE or M
+            elif key.endswith('_FE') or key.endswith('_M'):
+                elem = key.split('_')[0]
+                anum = periodic(elem)
+                # Convert [X/M] to [X/H]
+                # [X/M] = [X/H] + [M/H]
+                valh = val + mh
+                newdict[elem] = 10**valh * solar[anum-1]  
+            # Just element name, value is N(X)/N(H)
+            elif key.lower() in self.symbol_lower:
+                elem = key
+                anum = periodic(elem)
+                newdict[elem] = val
+            else:
+                raise ValueError(key+' not supported. Must X, be X_H, X_FE or X_M')
+        return newdict
+            
     def to_kurucz(self,scale=None):
         """ Convert to Kurucz model atmosphere header abundance format."""
 
@@ -621,20 +686,27 @@ class Abundances(object):
         # values all sum to 1.0
         # Li and above are modified as np.log10(abu/scale)
 
-        # N(He)/N(H) ~ 0.08511
-
-        # Sum( N(x)/N(H) ) over all elements = N(tot)/N(H)
-        nhntot = 1/np.sum(self.data)
+        # No scale input, use metallicity
+        if scale is None:
+            scale = 10**self.metallicity
         
-        # The ratio of YHe / XH = 0.08511
-        hehratio = 0.08511
-        abusum = np.sum(self.data[2:])
-        # 1 = abusum + renormed_H + renormed_H*hehratio
-        # renormed_H = (1-abusum)/(1+hehratio)
-        renormed_H = (1-abusum)/(1+hehratio)
-        renormed_He = renormed_H*hehratio
-        abu[0] = renormed_H
-        abu[1] = renormed_He
+        # Sum( N(x)/N(H) ) over all elements = N(tot)/N(H)
+        abu = self.data.copy()
+        abu[0] = 1
+        abu[1] = 0.0851138
+        nhntot = 1/np.sum(abu)
+
+        # Convert from N(X)/N(H) to N(X)/N(tot)
+        abu[1:] *= nhntot
+        abu[0] = nhntot
+        
+        # Scale the abundances and convert to log10
+        abu[2:] = np.log10( abu[2:] / scale )
+
+        # Limit lowest values to -20.0
+        for i in range(len(abu)):
+            if abu[i] < -19.99:
+                abu[i] = -20.0
         
         return abu,scale
 
