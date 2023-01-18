@@ -4,6 +4,14 @@ synthpy package
 Submodules
 ----------
 
+synthpy.abundance module
+------------------------
+
+.. automodule:: synthpy.abundance
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 synthpy.atmos module
 --------------------
 
@@ -12,10 +20,10 @@ synthpy.atmos module
    :undoc-members:
    :show-inheritance:
 
-synthpy.atmospheres module
---------------------------
+synthpy.atmosphere module
+-------------------------
 
-.. automodule:: synthpy.atmospheres
+.. automodule:: synthpy.atmosphere
    :members:
    :undoc-members:
    :show-inheritance:
@@ -28,6 +36,14 @@ synthpy.atomic module
    :undoc-members:
    :show-inheritance:
 
+synthpy.hofermodels module
+--------------------------
+
+.. automodule:: synthpy.hofermodels
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 synthpy.korg module
 -------------------
 
@@ -36,10 +52,26 @@ synthpy.korg module
    :undoc-members:
    :show-inheritance:
 
-synthpy.linelists module
+synthpy.kuruczgrid module
+-------------------------
+
+.. automodule:: synthpy.kuruczgrid
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+synthpy.linelist module
+-----------------------
+
+.. automodule:: synthpy.linelist
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+synthpy.marcsgrid module
 ------------------------
 
-.. automodule:: synthpy.linelists
+.. automodule:: synthpy.marcsgrid
    :members:
    :undoc-members:
    :show-inheritance:

@@ -57,7 +57,6 @@ def solarabund(stype='asplund'):
     # Solar abundances, N(X)/N(H)
     
     if stype=='asplund':
-
         # Asplund, Grevesse and Sauval (2005), basically the same as 
         # Grevesse N., Asplund M., Sauval A.J. 2007, Space Science Review 130, 205
         sol = [  0.911, 10.93,  1.05,  1.38,  2.70,  8.39,  7.78,  8.66,  4.56,  7.84, 
@@ -66,25 +65,50 @@ def solarabund(stype='asplund'):
                  2.88,  3.58,  2.29,  3.33,  2.56,  3.28,  2.60,  2.92,  2.21,  2.59, 
                  1.42,  1.92, -9.99,  1.84,  1.12,  1.69,  0.94,  1.77,  1.60,  2.00, 
                  1.00,  2.19,  1.51,  2.27,  1.07,  2.17,  1.13,  1.58,  0.71,  1.45, 
-                 -9.99,  1.01,  0.52,  1.12,  0.28,  1.14,  0.51,  0.93,  0.00,  1.08, 
+                -9.99,  1.01,  0.52,  1.12,  0.28,  1.14,  0.51,  0.93,  0.00,  1.08, 
                  0.06,  0.88, -0.17,  1.11,  0.23,  1.45,  1.38,  1.64,  1.01,  1.13,
                  0.90,  2.00,  0.65, -9.99, -9.99, -9.99, -9.99, -9.99, -9.99,  0.06,   
-                 -9.99, -0.52, -9.99, -9.99, -9.99, -9.99, -9.99, -9.99, -9.99 ]
-    elif stype=='husser':
+                -9.99, -0.52, -9.99, -9.99, -9.99, -9.99, -9.99, -9.99, -9.99 ]
         
+    elif stype=='husser':
         # a combination of meteoritic/photospheric abundances from Asplund et al. 2009
         # chosen for the Husser et al. (2013) Phoenix model atmospheres
-        sol = [  12.00, 10.93,  3.26,  1.38,  2.79,  8.43,  7.83,  8.69,  4.56,  7.93, 
+        sol = [ 12.00, 10.93,  3.26,  1.38,  2.79,  8.43,  7.83,  8.69,  4.56,  7.93, 
                  6.24,  7.60,  6.45,  7.51,  5.41,  7.12,  5.50,  6.40,  5.08,  6.34, 
                  3.15,  4.95,  3.93,  5.64,  5.43,  7.50,  4.99,  6.22,  4.19,  4.56, 
                  3.04,  3.65,  2.30,  3.34,  2.54,  3.25,  2.36,  2.87,  2.21,  2.58, 
                  1.46,  1.88, -9.99,  1.75,  1.06,  1.65,  1.20,  1.71,  0.76,  2.04, 
                  1.01,  2.18,  1.55,  2.24,  1.08,  2.18,  1.10,  1.58,  0.72,  1.42, 
-                 -9.99,  0.96,  0.52,  1.07,  0.30,  1.10,  0.48,  0.92,  0.10,  0.92, 
+                -9.99,  0.96,  0.52,  1.07,  0.30,  1.10,  0.48,  0.92,  0.10,  0.92, 
                  0.10,  0.85, -0.12,  0.65,  0.26,  1.40,  1.38,  1.62,  0.80,  1.17,
                  0.77,  2.04,  0.65, -9.99, -9.99, -9.99, -9.99, -9.99, -9.99,  0.06,   
-                 -9.99, -0.54, -9.99, -9.99, -9.99, -9.99, -9.99, -9.99, -9.99 ]
-        
+                -9.99, -0.54, -9.99, -9.99, -9.99, -9.99, -9.99, -9.99, -9.99 ]
+
+    elif stype=='marcs':
+        # Solar abundance values used by the MARCS model atmospheres
+        sol = [ 12.00, 10.93,  1.05,  1.38,  2.70,  8.39,  7.78,  8.66,  4.56,  7.84,
+                 6.17,  7.53,  6.37,  7.51,  5.36,  7.14,  5.50,  6.18,  5.08,  6.31,
+                 3.17,  4.90,  4.00,  5.64,  5.39,  7.45,  4.92,  6.23,  4.21,  4.60,
+                 2.88,  3.58,  2.29,  3.33,  2.56,  3.25,  2.60,  2.92,  2.21,  2.58,
+                 1.42,  1.92  -99.0,  1.84,  1.12,  1.66,  0.94,  1.77,  1.60,  2.00,
+                 1.00,  2.19,  1.51,  2.24,  1.07,  2.17,  1.13,  1.70,  0.58,  1.45,
+               -99.00,  1.00,  0.52,  1.11,  0.28,  1.14,  0.51,  0.93,  0.00,  1.08,
+                 0.06,  0.88  -0.17,  1.11,  0.23,  1.25,  1.38,  1.64,  1.01,  1.13,
+                 0.90,  2.00,  0.65, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0,  0.06,
+               -99.00, -0.52, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0]
+
+    elif stype=='kurucz':
+        # Kurucz solar abundances
+        sol = [ 12.0,  10.93,  1.096,  1.396,  2.546,  8.516,  7.916,  8.826, 4.556,  8.076,
+                6.326,  7.576, 6.466,  7.546,  5.446,  7.326,  5.496,  6.396, 5.116,  6.356,
+                3.166,  5.016, 3.996,  5.666,  5.386,  7.496,  4.916,  6.246, 4.206,  4.596,
+                2.876,  3.406, 2.366,  3.406,  2.626,  3.306,  2.596,  2.966, 2.236,  2.596,
+                1.416,  1.916, -9.99,  1.836,  1.116,  1.686,  0.936,  1.766, 1.656,  1.996,
+                0.996,  2.236, 1.506,  2.166,  1.126,  2.126,  1.166,  1.576, 0.706,  1.496,
+                -9.99,  1.006, 0.506,  1.116, 0.3460,  1.136,  0.256,  0.926, -0.00397661,  1.076,
+                0.056,  0.876, -0.134, 1.106, 0.2760,  1.446,  1.346,  1.796, 1.006,  1.126,
+                0.896,  1.946, 0.706,  -9.99,  -9.99,  -9.99,  -9.99,  -9.99, -9.99,  0.086,
+                -9.99, -0.504, -9.99,  -9.99,  -9.99,  -9.99,  -9.99,  -9.99, -9.99]
     else:
         raise ValueError(stype+" not supported")
         
@@ -246,8 +270,11 @@ class Abundances(object):
       The abundance format of "data".  Options are "linear" for N(X)/N(H), "log" for log(N(X)/N(H)),
         "logeps" for log(N(X)/N(H))+12.0, or "xh" / "x_h" for [X/H].
     stype : str, optional
-      The type of solar abundances to use.  Options are "asplund" for Asplund, Grevesse and Sauval (2005),
-       or "husser" Asplund et al. 2009 chosen for the Husser et al. (2013) Phoenix model atmospheres.
+      The type of solar abundances to use.  Options are
+       "asplund: Asplund, Grevesse and Sauval (2005)
+       "husser": Asplund et al. 2009 chosen for the Husser et al. (2013) Phoenix model atmospheres
+       "kurucz": abundances for the Kurucz model atmospheres (Grevesse+Sauval 1998)
+       "marcs": abundances for the MARCS model atmospheres (Grevesse+2007 values with CNO abundances from Grevesse+Sauval 2008)
        Default is "asplund".
 
     """
@@ -259,13 +286,15 @@ class Abundances(object):
         self.mass = atomic_mass.copy()
         self.symbol = atomic_symbol.copy()
         # Solar abundances
-        self._solar = solarabund(stype)
+        self._solar = np.array(solarabund(stype))
         self.stype = stype
         # No abundance input, use solar values
         if data is None:
             self.data = np.array(self._solar.copy())
         # Dictionary input
         elif type(data) == dict or type(data) == OrderedDict:
+            # Start with solar values
+            self.data = np.array(self._solar.copy())
             # This parses the dictionary and returns values in N(X)/N(H) format
             newdata = self.parseabudict(data)
             for i,k in enumerate(newdata):
@@ -274,11 +303,12 @@ class Abundances(object):
                 self.data[anum-1] = val
         # Only metallicity input, scale the solar values
         elif np.array(data).size==1:
-           self.data = self._solar.copy()
-           self.data[2:] *= 10**float(data)            
+            self.data = np.array(self._solar.copy())
+            self.data[2:] *= 10**float(data)
         # Abundance values input           
         else:
-            self.data = np.zeros(99,float)
+            # Initialize with solar abundances
+            self.data = np.array(self._solar.copy())
             if atype=='linear':
                 self.data[0:len(data)] = np.array(data)
             elif atype=='log':
@@ -306,14 +336,18 @@ class Abundances(object):
         newabund = self.copy()   # start new Abundances object to return
         # Single value, change overall metallicity
         if np.array(pars).size==1 and utils.isnumber(pars):
-            newabund.data[2:] *= 10**float(pars)
+            mh = newabund.metallicity
+            newmh = float(pars)
+            if newmh != mh:
+                # scale to solar, then to new metallicity (in one step)
+                newabund.data[2:] *= 10**(newmh-mh)
             return newabund
         # Dictionary input
         if parstype == dict or pastype == OrderedDict:
             # Parse the dictionary and return values in N(X)/N(H) format            
-            newpars = newabund.parseabudict(parse)
-            for i,k in enumerate(newdata):
-                val = newdata[k]
+            newpars = newabund.parseabudict(pars)
+            for i,k in enumerate(newpars):
+                val = newpars[k]
                 anum = periodic(k)
                 newabund.data[anum-1] = val
             return newabund
@@ -507,7 +541,7 @@ class Abundances(object):
         """ Return data with all elements filled in."""
         # This is useful when the object does not hold all of the elements
         if len(self)<99:
-            data = solarabund(self.stype)
+            data = np.array(solarabund(self.stype))
             for v in self:
                 data[v.element-1] = v.data
             return data
@@ -714,6 +748,10 @@ class Abundances(object):
         """ Convert to MARCS model atmosphere header abundance format."""        
         abu = self.logeps
         abu[0] = 12
+        # Limit lowest values to -99.0
+        for i in range(len(abu)):
+            if abu[i] < -20:
+                abu[i] = -99.0
         return abu
 
     def copy(self):

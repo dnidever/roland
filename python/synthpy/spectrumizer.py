@@ -74,7 +74,7 @@ class Spectrumizer(object):
         self.synthtype = synthtype.lower()
         self._linelist = linelist
         # Check if we need to translate the linelist
-        self.linelist = utils.default_linelists(synthtype)
+        self.linelists = utils.default_linelists(synthtype)
         self.atmos = atmos
         # "atlasgrid" : The internal Kurucz/ATLAS grid with interpolation to the
         #             input Teff, logg, and [M/H].
@@ -165,9 +165,9 @@ class Spectrumizer(object):
         # If vmicro is not input then get it from the stellar parameters
         if kwargs.get('vmicro') is None:
             kwargs['vmicro'] = microturbulence(logg,teff)
-        if kwargs.get('mh'] is None:
+        if kwargs.get('mh') is None:
             kwargs['mh'] = 0.0
-        if kwargs.get('ah'] is None:
+        if kwargs.get('ah') is None:
             kwargs['am'] = 0.0
         #if 'linelists' not in kwargs.keys() and self.linelists is not None:
         #    kwargs['linelists'] = self.linelists
@@ -177,7 +177,7 @@ class Spectrumizer(object):
         kwargs['linelists'] = self.getlinelist(teff,logg,**kwargs)
         return self._synthesis(teff,logg,**kwargs)
 
-    def getlinelist(self,*kwargs):
+    def getlinelists(self,*kwargs):
         """ Return the model atmosphere."""
 
         #-synspec: can take multiple linelists, ONE atomic, multiple molecular lists
@@ -200,7 +200,7 @@ class Spectrumizer(object):
         
         if kwargs.get('linelists') is None:
             # Use initially input linelists
-            linelist = self.linelists
+            linelists = self.linelists
         else:
             linelists = kwargs['linelists']
             # Check if we need to translate
