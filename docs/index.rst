@@ -9,7 +9,7 @@ SynthPy
 
 Introduction
 ============
-|synthpy| is a generical stellar spectral synthesis package that can be run from python.
+|synthpy| is a generic stellar spectral synthesis package that can be run from python.
 
 .. toctree::
    :maxdepth: 1
