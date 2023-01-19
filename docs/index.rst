@@ -15,6 +15,10 @@ Introduction
    :maxdepth: 1
 
    install
+   linelist
+   atmosphere
+   abundance
+   spectrumizer
    modules
 	      
 

@@ -1,5 +1,5 @@
 import numpy as np
-from . import linelist,atmosphere
+from . import linelist,atmosphere,abundance
 
 # Class for Spectrumizer object that creates a spectrum
 
@@ -114,7 +114,7 @@ class Spectrumizer(object):
         logg : float
            Surface gravity.
         mh : float, optional
-           Metallicity, [M/H].  Deftauls is 0.0 (solar).
+           Metallicity, [M/H].  Default is 0.0 (solar).
         am : float, optional
            Alpha abundance, [alpha/M].  Default is 0.0 (solar).
         cm : float, optional
