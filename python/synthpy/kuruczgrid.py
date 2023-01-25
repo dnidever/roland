@@ -105,8 +105,10 @@ def convertall():
     """ Load all Kurucz/ATLAS models and save to a pickle file."""
 
     # https://wwwuser.oats.inaf.it/castelli/grids.html
-    filesp = glob('/Users/nidever/projects/synthpy/python/synthpy/atmos/am*odfnew.dat')
-    filesm = glob('/Users/nidever/projects/synthpy/python/synthpy/atmos/ap*odfnew.dat')    
+    #filesp = glob('/Users/nidever/projects/synthpy/python/synthpy/atmos/am*odfnew.dat')
+    #filesm = glob('/Users/nidever/projects/synthpy/python/synthpy/atmos/ap*odfnew.dat')
+    filesp = glob('/Users/nidever/kurucz/models/ap*odfnew.dat')
+    filesm = glob('/Users/nidever/kurucz/models/am*odfnew.dat')    
     files = filesp + filesm
     nfiles = len(files)
     print(nfiles,' files')
@@ -178,10 +180,10 @@ def convertall():
     tab = tab[0:count]
             
     # Save the data
-    Table(tab).write('/Users/nidever/kurucz/kurucz_index.fits',overwrite=True)
-    dln.pickle('/Users/nidever/kurucz/kurucz_data.pkl',data)
-    dln.writelines('/Users/nidever/kurucz/kurucz_data.txt',linedata)
-    subprocess.run(['gzip','--best','/Users/nidever/kurucz/kurucz_data.txt'])
+    Table(tab).write('/Users/nidever/kurucz/models/kurucz_index.fits',overwrite=True)
+    dln.pickle('/Users/nidever/kurucz/models/kurucz_data.pkl',data)
+    dln.writelines('/Users/nidever/kurucz/models/kurucz_data.txt',linedata)
+    subprocess.run(['gzip','--best','/Users/nidever/kurucz/models/kurucz_data.txt'])
     
     import pdb; pdb.set_trace()
 
