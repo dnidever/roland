@@ -2234,6 +2234,8 @@ def writer_kurucz(info):
     EP2 = info.get('EP2')
     J2 = info.get('J2')
 
+    # Can use EP2 (or EP1) and deltaEP (from wavelength) to get the other EP!!!
+    
     # Check that we have the essentials
     if lam is None or loggf is None or specid is None or EP1 is None or EP2 is None:
         raise ValueError('Need at least lambda,loggf,specid,ep or (EP1,EP2) for VALD format')
@@ -2414,6 +2416,8 @@ def writer_aspcap(info):
     #    EP2 /= 1.2389e-4   # convert eV to cm-1
     J2 = info.get('J2')
 
+    # Can use EP2 (or EP1) and deltaEP (from wavelength) to get the other EP!!!
+    
     # Check that we have the essentials
     if lam is None or orggf is None or specid is None or EP1 is None or J1 is None or EP2 is None or J2 is None:
         raise ValueError('Need at least lambda,loggf,specid,EP1,J1,EP2,J2 for ASPCAP format')
@@ -2626,6 +2630,8 @@ def writer_synspec(info):
     #    EP2 /= 1.2389e-4   # convert eV to cm-1
     J2 = info.get('J2')
 
+    # Can use EP2 (or EP1) and deltaEP (from wavelength) to get the other EP!!!
+    
     # Check that we have the essentials
     if lam is None or loggf is None or specid is None or EP1 is None or \
        J1 is None or EP2 is None or J2 is None:
