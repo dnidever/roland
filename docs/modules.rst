@@ -1,7 +1,7 @@
-synthpy
-=======
+roland
+======
 
 .. toctree::
    :maxdepth: 4
 
-   synthpy
+   roland

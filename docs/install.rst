@@ -5,24 +5,24 @@ Installation
 
 Important packages
 ==================
-|synthpy| is a package to run the `MOOG <https://github.com/jsobeck/MOOG-SCAT_basic_git>`_ and `moog17scat <https://github.com/alexji/moog17scat>`_
+|roland| is a package to run the `MOOG <https://github.com/jsobeck/MOOG-SCAT_basic_git>`_ and `moog17scat <https://github.com/alexji/moog17scat>`_
 spectral synthesis code by Chris Sneden and scattering improvements by Jennifer Sobeck and other updates by Alex Ji.
 There is also a Python wrapper/driver based on some old IDL software I wrote and some code from Jon Holtzman in the
 in the `APOGEE package <https://github.com/sdss/apogee>`_).
 
-Installing SynthPy
-==================
+Installing Roland
+=================
 
 The easiest way to install the code is with pip.
 
 .. code-block:: bash
 
-    pip install synthpy
+    pip install roland
 
 Synthesis Packages
 ==================
 
-The various spectral synthesis packages that |synthpy| calls are not installed automatically.  That's because the code
+The various spectral synthesis packages that |roland| calls are not installed automatically.  That's because the code
 is mostly Fortran or Julia and I didn't trust an automatic install for all of these.  However, they should be pretty
 to install.
 

@@ -1,5 +1,5 @@
 import numpy as np
-from . import linelist,atmosphere,abundance
+from . import linelist,atmosphere,abundance,utils
 
 # Class for Spectrumizer object that creates a spectrum
 
@@ -276,7 +276,7 @@ class Spectrumizer(object):
 class SynspecSpectrumizer(Spectrumizer):
     
     def __init__(self,linelist=None,atmos='atmosnet',wrange=[5000,6000],dw=0.1):
-        super().__init__(linelist=linelist,atmos=atmos,wrange=wrange,dw=dw)        
+        super().__init__('synspec',linelist=linelist,atmos=atmos,wrange=wrange,dw=dw)        
         self.synthtype = 'synspec'
         # Load the code
         try:
@@ -298,7 +298,7 @@ class SynspecSpectrumizer(Spectrumizer):
 class KorgSpectrumizer(Spectrumizer):
     
     def __init__(self,linelist=None,atmos='atmosnet',wrange=[5000,6000],dw=0.1):
-        super().__init__(linelist=linelist,atmos=atmos,wrange=wrange,dw=dw)        
+        super().__init__('korg',linelist=linelist,atmos=atmos,wrange=wrange,dw=dw)        
         self.synthtype = 'korg'
         # Load the code
         #print('It will take a minute to get Korg/Julia set up')
@@ -308,7 +308,7 @@ class KorgSpectrumizer(Spectrumizer):
 class TurboSpectrumizer(Spectrumizer):
     
     def __init__(self,linelist=None,atmos='atmosnet',wrange=[5000,6000],dw=0.1):
-        super().__init__(linelist=linelist,atmos=atmos,wrange=wrange,dw=dw)                
+        super().__init__('turbo',linelist=linelist,atmos=atmos,wrange=wrange,dw=dw)                
         self.synthtype = 'turbo'
         # Load the code
         try:
@@ -320,7 +320,7 @@ class TurboSpectrumizer(Spectrumizer):
 class MOOGSpectrumizer(Spectrumizer):
 
     def __init__(self,linelist=None,atmos='atmosnet',wrange=[5000,6000],dw=0.1):
-        super().__init__(linelist=linelist,atmos=atmos,wrange=wrange,dw=dw)
+        super().__init__('moog',linelist=linelist,atmos=atmos,wrange=wrange,dw=dw)
         self.synthtype = 'moog'
         # Load the code
         try:

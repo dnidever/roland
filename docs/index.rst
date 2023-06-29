@@ -1,15 +1,15 @@
-.. synthpy documentation master file, created by
+.. roland documentation master file, created by
    sphinx-quickstart on Tue Feb 16 13:03:42 2021.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-*******
-SynthPy
-*******
+******
+Roland
+******
 
 Introduction
 ============
-|synthpy| is a generic stellar spectral synthesis package that can be run from python.
+|roland| is a generic stellar spectral synthesis package that can be run from python.
 
 .. toctree::
    :maxdepth: 1
@@ -24,7 +24,7 @@ Introduction
 
 Description
 ===========
-To run |synthpy| you need 1) a model atmosphere, 2) a linelist (or multiple), and 3) the set of stellar parameters
+To run |roland| you need 1) a model atmosphere, 2) a linelist (or multiple), and 3) the set of stellar parameters
 and elemental abundances that you want to run.
 
 1) Model Atmospheres

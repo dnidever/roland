@@ -101,10 +101,19 @@ def synthesize(teff,logg,mh=0.0,am=0.0,cm=0.0,nm=0.0,vmicro=2.0,elems=None,
     for i in [8,10,12,14,16,18,20,22]:
         abundances[i-1] += am
     # Abundance overrides from els, given as [X/M]
-    if elems is not None :
+    if elems is not None:
         for el in elems:
-            atomic_num = atomic.periodic(el[0])
-            abundances[atomic_num-1] = atomic.solar(el[0]) + mh + el[1]
+            aname = el[0]
+            if len(aname)>1:
+                aname = aname[0].upper()+aname[1:]
+            else:
+                aname = aname.upper()
+            atomic_num = atomic.periodic(aname)
+            if len(atomic_num)>0:
+                abundances[atomic_num-1] = atomic.solar(aname) + mh + el[1]
+            else:
+                print('Error: element name '+aname+' not found')
+    
     # Cap low abundances at -5.0
     #   that's what Korg uses internally for the solar abundances
     for i in range(len(abundances)):

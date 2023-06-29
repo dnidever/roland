@@ -3,15 +3,15 @@ Synthesis
 *********
 
 
-Using Synthesis in SynthPy
+Using Synthesis in Roland
 ==========================
 
-|synthpy| has an :class:`.Abund` class for single abundance values and an :class:`.Abundances` class that holds the abundances for
+|roland| has an :class:`.Abund` class for single abundance values and an :class:`.Abundances` class that holds the abundances for
 all elements.  These are handy for modifying abundances when running synthesis.
 
 Let's import the  :class:`.Abundances` class from the :mod:`.abundance` module::
 
-    >>> from synthpy.abundance import Abundances
+    >>> from roland.abundance import Abundances
 
 Internal Values and Hydrogen/Helium Abundances
 ----------------------------------------------

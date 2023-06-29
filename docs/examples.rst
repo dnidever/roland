@@ -3,14 +3,14 @@ Examples
 ********
 
 
-Running SynthPy
-===============
-You need to supply |synthpy| with 1) a model atmosphere, 2) a linelist (or multiple linelists), and 3) the set of stellar
+Running Roland
+==============
+You need to supply |roland| with 1) a model atmosphere, 2) a linelist (or multiple linelists), and 3) the set of stellar
 parameters and abundances.
 
 Here's a simple example:
 
-    >>> from synthpy import spectrumizer
+    >>> from roland import spectrumizer
     >>> atmod = utils.testdir()+'t3710g083m+000.mod'
     >>> linelists = [utils.datadir()+'moogatom.gz',utils.datadir()+'moogh2o.gz']
     >>> moog = spectrumizer.spectrumizer('moog')
