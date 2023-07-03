@@ -107,9 +107,11 @@ def convertall():
     # https://wwwuser.oats.inaf.it/castelli/grids.html
     #filesp = glob('/Users/nidever/projects/synthpy/python/synthpy/atmos/am*odfnew.dat')
     #filesm = glob('/Users/nidever/projects/synthpy/python/synthpy/atmos/ap*odfnew.dat')
-    filesp = glob('/Users/nidever/kurucz/models/ap*odfnew.dat')
-    filesm = glob('/Users/nidever/kurucz/models/am*odfnew.dat')    
-    files = filesp + filesm
+    filesp = glob('/Users/nidever/kurucz/models/ap??k2odfnew.dat')
+    filesm = glob('/Users/nidever/kurucz/models/am??k2odfnew.dat')
+    filesap = glob('/Users/nidever/kurucz/models/ap??ak2odfnew.dat')
+    filesam = glob('/Users/nidever/kurucz/models/am??ak2odfnew.dat')    
+    files = filesp + filesm + filesap + filesam
     nfiles = len(files)
     print(nfiles,' files')
 
