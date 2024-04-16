@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from . import linelist,atmosphere,abundance,utils
 
@@ -89,7 +90,7 @@ class Spectrumizer(object):
         #             stellar parameters and abundances will be used to
         #             obtain the model.    
         elif atmos.lower()=='atmosnet':
-            from atmosnet import model as anetmodels
+            from atmosnet import models as anetmodels
             self._atmosfunc = anetmodels.load_models()
         # <function> : A user-defined function that needs to be able to take
         #             as input Teff, logg, and [M/H]            
