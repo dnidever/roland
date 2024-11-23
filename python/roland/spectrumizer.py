@@ -27,7 +27,7 @@ def spectrumizer(synthtype,*args,**kwargs):
 class Spectrumizer(object):
     """
     A class to generate a spectrum with a certain type of linelist, model atmosphere and spectral synthesis package.
-    # Base class
+    This is a base class.  Do not use it directly.
 
     Paramaters
     ----------
@@ -75,16 +75,16 @@ class Spectrumizer(object):
         self.synthtype = synthtype.lower()
         self._linelist = linelist
         # Check if we need to translate the linelist
-        self.linelists = utils.default_linelists(synthtype)
+        self.linelists = utils.default_linelists(self.synthtype)
         self.atmos = atmos
         # "atlasgrid" : The internal Kurucz/ATLAS grid with interpolation to the
         #             input Teff, logg, and [M/H].
         if atmos.lower()=='kuruczgrid':
-            self._atmosfunc = atmospheres.KuruczGrid()
+            self._atmosfunc = atmosphere.KuruczGrid()
         # "marcsgrid" : The internal MARCS grid with interpolation to the
         #             input Teff, logg, and [M/H].
         elif atmos.lower()=='marcsgrid':
-            self._atmosfunc = atmospheres.MARCSGrid()
+            self._atmosfunc = atmosphere.MARCSGrid()
         # "atmosnet" : The atmosnet artificial neural network package trained
         #             on a large grid of model atmospheres.  The input
         #             stellar parameters and abundances will be used to
@@ -173,13 +173,13 @@ class Spectrumizer(object):
         #if 'linelists' not in kwargs.keys() and self.linelists is not None:
         #    kwargs['linelists'] = self.linelists
         # Get the linelist based on puts
-        kwargs['atmod'] = self.getlinelist(teff,logg,**kwargs)
+        kwargs['atmod'] = self.getatmos(teff,logg,**kwargs)
         # Get the model atmosphere
-        kwargs['linelists'] = self.getlinelist(teff,logg,**kwargs)
+        kwargs['linelists'] = self.getlinelists(**kwargs)
         return self._synthesis(teff,logg,**kwargs)
 
-    def getlinelists(self,*kwargs):
-        """ Return the model atmosphere."""
+    def getlinelists(self,**kwargs):
+        """ Return the linelists."""
 
         #-synspec: can take multiple linelists, ONE atomic, multiple molecular lists
         #    they must all either be ascii or binary files
@@ -210,11 +210,11 @@ class Spectrumizer(object):
             #Converter()
             #Linelist()
         # Trim the linelist to the input wrange
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
 
-        return linelist
+        return linelists
             
-    def getatmos(self,*kwargs):
+    def getatmos(self,teff,logg,**kwargs):
         """ Return the model atmosphere."""
         # Synspec: MARCS and Kurucz
         # MOOG: MARCS and Kurucz but in "moog" format
@@ -228,14 +228,14 @@ class Spectrumizer(object):
             am = kwargs['am']
             # "atlasgrid" : The internal Kurucz/ATLAS grid with interpolation to the
             #             input Teff, logg, and [M/H].
-            if self.atmos=='kuruczgrid':
+            if str(self.atmos).lower()=='kuruczgrid':
                 atmod = self._atmosfunc(teff,logg,mh,am)
                 atmos_type = 'kurucz'
                 if self.synthtype=='moog':
                     atmod = atmod.to_moog()
             # "marcsgrid" : The internal MARCS grid with interpolation to the
             #             input Teff, logg, and [M/H].
-            if self.atmos=='marcsgrid':
+            elif str(self.atmos).lower()=='marcsgrid':
                 atmod = self._atmosfunc(teff,logg,mh,am) 
                 atmos_type = 'marcs'
                 if self.synthtype=='moog':
@@ -244,7 +244,7 @@ class Spectrumizer(object):
             #             on a large grid of model atmospheres.  The input
             #             stellar parameters and abundances will be used to
             #             obtain the model.
-            if self.atmos=='atmosnet':
+            elif str(self.atmos).lower()=='atmosnet':
                 atm1 = self._atmosfunc(teff,logg,mh,am)
                 atm1.header = [a.rstrip() for a in atm1.header]
                 # Convert to synthpy KuruczAtmosphere object
@@ -258,7 +258,7 @@ class Spectrumizer(object):
                 atmos_type = 'atmosnet'
             # <function> : A user-defined function that needs to be able to take
             #             as input Teff, logg, and [M/H]
-            if type(self.atmos) is function:
+            elif callable(self.atmos):
                 atmod = self.atmos(teff,logg,mh,am)
             else:
                 raise Exception(str(self.atmos)+' not supported')
@@ -267,7 +267,7 @@ class Spectrumizer(object):
             # atmos.kurucz2turbo(), marcs2turbo()
             # fraunhofer, marcs.py readmarcs() reads marcs file and gets essential info for Korg
             # fraunhofer, models.py has interpolation code
-            import pdb; pdb.set_trace()
+            #import pdb; pdb.set_trace()
 
             return atmod
             
@@ -305,7 +305,7 @@ class KorgSpectrumizer(Spectrumizer):
         #print('It will take a minute to get Korg/Julia set up')
         from . import korg
         self._synthesis = korg.synthesize
-
+        
 class TurboSpectrumizer(Spectrumizer):
     
     def __init__(self,linelist=None,atmos='atmosnet',wrange=[5000,6000],dw=0.1):

@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import time
+import tempfile
 
 from julia.api import Julia
 jl = Julia(compiled_modules=False)
@@ -67,12 +68,12 @@ def synthesize(teff,logg,mh=0.0,am=0.0,cm=0.0,nm=0.0,vmicro=2.0,elems=None,
 
     t0 = time.time()
     atmos_type = 'marcs'
-
+    
     # Default linelists
     if linelists is None:
         linelistdir = utils.linelistsdir()
         linelists = ['gfATO.19.11','gfMOLsun.20.11','gfTiO.20.11','H2O-8.20.11']
-        linelists = [l+linelistdir for l in linelists]
+        linelists = [os.path.join(linelistdir,l) for l in linelists]
 
     # Adjusting abundances
     # Korg.format_A_X(-0.5) will adjust all metals by -0.5 dex
@@ -127,23 +128,31 @@ def synthesize(teff,logg,mh=0.0,am=0.0,cm=0.0,nm=0.0,vmicro=2.0,elems=None,
     #                  atmos.cval(mh), atmos.cval(am), atmos.cval(cm), atmos.cval(nm),atmos.cval(vmicro))
 
     # Check that linelists and model atmosphere files exit
-    if type(linelists) is str:
+    if isinstance(linelists,str):
         linelists = [linelists]
     for l in linelists:
         if os.path.exists(l)==False:
             raise FileNotFoundError(l)
-    if os.path.exists(atmod)==False:
-        raise FileNotFoundError(atmod)
 
     if dospherical and ('marcs' in atmos_type) and logg <= 3.001:
         spherical= True
     else:
         spherical = False
         
+    # Korg needs to read the atmosphere from a file
+    if isinstance(atmod,str)==False:
+        tid,tfile = tempfile.mkstemp(prefix="atm",dir=".")
+        atmosfile = tfile
+        atmod.write(atmosfile)
+    else:
+        atmosfile = atmod
+    if os.path.exists(atmosfile)==False:
+        raise FileNotFoundError(atmosfile)
+
     # Load the linelist and model atmosphere
     #  read_linelist() can take an isotropic_abundances argument
     lines = Korg.read_linelist(linelists[0])
-    atm = Korg.read_model_atmosphere(atmod)
+    atm = Korg.read_model_atmosphere(tempatmod)
 
     # Run Korg
     spectrum = Korg.synthesize(atm, lines, abundances, wrange[0], wrange[1], dw, vmic=vmicro)

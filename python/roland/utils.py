@@ -586,7 +586,7 @@ def download_linelists(lineset='all',force=False):
         filelist = synspec + moog + turbo
     elif lineset.lower()=='synspec':
         filelist = synspec
-    elif linelist.lower()=='moog':
+    elif lineset.lower()=='moog':
         filelist = moog
     elif lineset.lower()[0:5]=='turbo':
         filelist = turbo
