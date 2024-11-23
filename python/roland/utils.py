@@ -549,7 +549,7 @@ def default_linelists(synthtype,download=True):
         exists = [os.path.exists(f) for f in filenames]
         if np.sum(exists) != len(filenames) and download:  # download, if necessary
             download_linelists('moog')        
-    elif 'turbo' in linelist.lower():
+    elif 'turbo' in synthtype.lower():
         filenames = ['gfATO.turbo','gfMOLsun.turbo','gfTiO.turbo','H2O-8.turbo']
         filenames = [datadir()+f for f in filenames]
         exists = [os.path.exists(f) for f in filenames]

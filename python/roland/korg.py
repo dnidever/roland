@@ -133,21 +133,13 @@ def synthesize(teff,logg,mh=0.0,am=0.0,cm=0.0,nm=0.0,vmicro=2.0,elems=None,
     for l in linelists:
         if os.path.exists(l)==False:
             raise FileNotFoundError(l)
+    if os.path.exists(atmod)==False:
+        raise FileNotFoundError(atmod)
 
     if dospherical and ('marcs' in atmos_type) and logg <= 3.001:
         spherical= True
     else:
         spherical = False
-        
-    # Korg needs to read the atmosphere from a file
-    if isinstance(atmod,str)==False:
-        tid,tfile = tempfile.mkstemp(prefix="atm",dir=".")
-        atmosfile = tfile
-        atmod.write(atmosfile)
-    else:
-        atmosfile = atmod
-    if os.path.exists(atmosfile)==False:
-        raise FileNotFoundError(atmosfile)
 
     # Load the linelist and model atmosphere
     #  read_linelist() can take an isotropic_abundances argument

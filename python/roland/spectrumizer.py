@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import tempfile
 from . import linelist,atmosphere,abundance,utils
 
 # Class for Spectrumizer object that creates a spectrum
@@ -172,11 +173,25 @@ class Spectrumizer(object):
             kwargs['am'] = 0.0
         #if 'linelists' not in kwargs.keys() and self.linelists is not None:
         #    kwargs['linelists'] = self.linelists
-        # Get the linelist based on puts
-        kwargs['atmod'] = self.getatmos(teff,logg,**kwargs)
         # Get the model atmosphere
         kwargs['linelists'] = self.getlinelists(**kwargs)
-        return self._synthesis(teff,logg,**kwargs)
+        # Get the linelist based on puts
+        atmod = self.getatmos(teff,logg,**kwargs)
+        # Write the model atmosphere to
+        if isinstance(atmod,str)==False:
+            tid,tfile = tempfile.mkstemp(prefix="atm",dir=".")
+            atmosfile = tfile
+            atmod.write(atmosfile)
+        else:
+            tfile = None
+            atmosfile = atmod
+        kwargs['atmod'] = atmosfile
+        # Run the synthesis
+        out = self._synthesis(teff,logg,**kwargs)
+        # Delete temporary model atmosphere file
+        if tfile is not None:
+            if os.path.exists(tfile): os.remove(tfile)
+        return out
 
     def getlinelists(self,**kwargs):
         """ Return the linelists."""
@@ -284,6 +299,7 @@ class SynspecSpectrumizer(Spectrumizer):
             from synspec import synthesis as synsynthesis
         except:
             raise Exception('Problems importing synspec package')
+        from synspec import synthesis as synsynthesis
         self._synthesis = synsynthesis.synthesize
         # Use default synspec linelists
         if linelist is None:
